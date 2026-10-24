@@ -14,7 +14,7 @@ This list is separate from `execution/tasks.json`: these tasks prepare the coord
 ## 3. Deferred verification
 - [x] T0009-006 Run the now-authorized focused offline model/budget tests and OpenSpec/package checks, diagnose failures and record observed results in docs/verification.md.
 - [ ] T0009-007 With credentials and explicit authorization for billable probes, qualify requested models, catalog schemas, effort levels, image metadata and real tool/schema/usage behavior; record observations without secrets.
-- [ ] T0009-008 Publish the authorized change as an English pull request and check offline CI.
+- [x] T0009-008 Publish the authorized change as English PR #1 and check offline CI (code commit 84a15ef passed; latest PR checks remain the source for current-head status). No merge performed.
 - [x] T0009-009 Implement separate persistent Codex/OpenRouter token budgets, concurrent reservations, feature/call admission, consumption monitoring and fail-closed stopping; qualify with offline fake-process tests.
 
 Application implementation agents remain unrequested and MUST NOT be launched by these preparation steps.

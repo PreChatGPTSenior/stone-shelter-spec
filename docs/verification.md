@@ -12,12 +12,15 @@ Current offline verification:
 | Existing coordinator regression | 29 tests passed; temporary Git lifecycle and controlled child-process fixtures, no real agents |
 | Task graph and traceability | 48 tasks, 85 requirements, 36 acceptance scenarios; application DAG unchanged |
 | Strict OpenSpec validation | 9 changes passed, 0 failures |
+| Updated planning/execution skills | Both passed the skill-creator validator; PyYAML 6.0.3 isolated in ignored validation tooling, no application dependency added |
 | Budget admission | Zero defaults block before catalog/probe calls; 8 concurrent reservation contenders cannot oversubscribe 2 available allowances |
 | Budget stopping | Exact threshold, late overrun, unknown usage, orphaned reservations, policy edits, lowered limits on restart, silent sibling cancellation and merge/DONE prevention covered |
 
 Fixes include closing read-only SQLite connections, rejecting malformed policy field types with controlled blockers and rejecting impossible reasoning-token subsets. The new suites explicitly replace subprocess creation and deny socket connections; their only model event streams are local fixtures. Historical analyzer/browser checks below were not rerun because application/static/runtime gate code did not change. Live model IDs, provider catalog schema, effort/image support, actual account access and billing remain **NOT_VERIFIED** under pending T0009-007. Offline success does not assert real-provider compatibility or application acceptance.
 
 Budgets measure observed input plus output tokens, not money. In-flight turns can exceed an allowance before telemetry arrives; the full observed overrun is retained. No budget limit was activated and no private accounting data or secret was published. GitHub CI for the new PR runs the same offline package checks; PR checks are the publication evidence.
+
+Published as [PR #1](https://github.com/PreChatGPTSenior/stone-shelter-spec/pull/1). The implementation commit `84a15ef` passed [offline GitHub CI](https://github.com/PreChatGPTSenior/stone-shelter-spec/actions/runs/40074086003); the PR's current-head checks include later publication-record updates. This is a proposed change, not a merge or application deployment.
 
 ## Initial preparation baseline
 
