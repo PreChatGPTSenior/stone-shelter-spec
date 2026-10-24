@@ -18,6 +18,23 @@ def verify_artifacts(reports):
   for p,h in r['artifact_hashes'].items():
    if sha(p)!=h:raise Blocked('Changed evidence artifact')
 
+def retain_static_artifacts(run,paths,expected=None):
+ # Analyzer caches are disposable and outside audit backups. Preserve verified
+ # bytes before admitting the stage, and hash these durable copies in its report.
+ expected=expected or {str(p):sha(p) for p in paths}
+ folder=run/'static-evidence';folder.mkdir(mode=0o700)
+ saved=[]
+ for i,source in enumerate(paths):
+  target=folder/(str(i)+'-'+Path(source).name)
+  with target.open('xb') as stream:
+   os.chmod(target,0o600);stream.write(Path(source).read_bytes());stream.flush();os.fsync(stream.fileno())
+  if sha(target)!=expected[str(source)]:raise Blocked('Analyzer evidence changed while retaining audit copy')
+  saved.append(target)
+ descriptor=os.open(folder,os.O_RDONLY)
+ try:os.fsync(descriptor)
+ finally:os.close(descriptor)
+ return saved
+
 def monitored(argv,cwd,env,stack,task,run,name,timeout=1800):
  before=probe(stack,task,env);json_write(run/(name+'-environment-before.json'),before)
  log=run/(name+'.log');deadline=time.monotonic()+timeout;observations=[];test_checks=None
@@ -73,8 +90,10 @@ def static_gate(task,tree,run,env,candidate,changed):
   packet=run/'static-packet.json';json_write(packet,{'schema':1,'mode':'application','task_ids':[task['id']],'source_root':str(tree),'java_roots':['stone-shelter-api/src/main/java','stone-shelter-api/src/test/java'] if java else [],'react_roots':['stone-shelter-ui/src'] if react else []})
   result,path=static_analysis.run_gate(packet,env.get('JAVA_HOME'))
   if result['status']!='PASS':raise Blocked('Checkstyle/PMD/ESLint admission failed; report '+str(path))
-  static_analysis.verify_handoff(packet,path,env.get('JAVA_HOME'));raw+=[path,packet]
-  raw += [Path(c['report']) for c in result['checks'].values()]
+  sources=[path]+[Path(c['report']) for c in result['checks'].values()]
+  expected={str(p):sha(p) for p in sources}
+  static_analysis.verify_handoff(packet,path,env.get('JAVA_HOME'));raw.append(packet)
+  raw += retain_static_artifacts(run,sources,expected)
  if react:
   for label,argv in [('typecheck',['npm','exec','--','tsc','--noEmit']),('build',['npm','run','build'])]:
    r=subprocess.run(argv,cwd=tree/'stone-shelter-ui',env=env,capture_output=True,text=True,timeout=300)

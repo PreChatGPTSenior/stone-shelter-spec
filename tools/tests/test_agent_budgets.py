@@ -169,7 +169,7 @@ class BudgetTest(unittest.TestCase):
                 return inner.returncode
             def poll(inner): return inner.returncode
         def terminate(process): process.returncode = -15
-        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime.subprocess, 'Popen', Process), \
+        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime, 'launch', Process), \
                 patch.object(runtime, 'terminate', side_effect=terminate) as cancelled:
             with self.assertRaises(Blocked):
                 runtime.invoke(self.codex, 'T0002-002', 'developer', self.root, self.root / 'run',
@@ -193,7 +193,7 @@ class BudgetTest(unittest.TestCase):
                     raise subprocess.TimeoutExpired('fake', timeout)
                 return inner.returncode
         def terminate(process): process.returncode = -15
-        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime.subprocess, 'Popen', Process), \
+        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime, 'launch', Process), \
                 patch.object(runtime, 'terminate', side_effect=terminate) as cancelled:
             with self.assertRaises(Blocked):
                 runtime.invoke(self.router, 'T0002-002', 'code_review', self.root, self.root / 'quiet',
@@ -235,6 +235,22 @@ class BudgetTest(unittest.TestCase):
         self.assertEqual(2, len(cycles))
         self.assertFalse(any(call.args[0][:2] == ['git', 'merge'] for call in command.call_args_list))
         self.assertEqual('BLOCKED', state.status()[task['id']]['status'])
+
+    def test_finalization_serializes_with_stop_writers_and_rejects_committed_stop(self):
+        self.reserve('concurrent')
+        started = threading.Event()
+        def stop_writer():
+            started.set()
+            self.budget.observe('concurrent', self.metrics(100), final=True)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with self.budget.finalization():
+                future = executor.submit(stop_writer)
+                self.assertTrue(started.wait(2))
+                # Stop cannot commit in the middle of final state/journal publication.
+                self.assertFalse(future.done())
+            future.result(timeout=2)
+        with self.assertRaises(Blocked):
+            with self.budget.finalization(): self.fail('Stopped task must never publish DONE')
 
 
 if __name__ == '__main__': unittest.main()

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
 from execution.core import Blocked, State, json_write, sha, stable
 from execution.history import History, read_rows, recovery_status, require_recovered, timeline, verify_evidence
 from execution.audit_backup import backup, idle, restore, verify
+from execution.budgets import Budgets
 
 
 class HistoryTest(unittest.TestCase):
@@ -120,6 +121,84 @@ os._exit(17)
         result = subprocess.run([sys.executable, '-c', script, str(self.journal.path)], capture_output=True, timeout=10)
         self.assertEqual(19, result.returncode)
         self.assertEqual(['committed'], [event['event'] for event in timeline(self.journal.path)])
+
+    def completed_task(self):
+        state = State(self.directory / 'state.sqlite'); state.claim(self.task, 'attempt')
+        self.journal.append('task.claimed', task=self.task['id'], trace='attempt')
+        state.set(self.task['id'], 'DONE', 'attempt', 'fixture-commit'); state.release('attempt')
+        self.journal.append('task.completed', task=self.task['id'], trace='attempt', payload={'commit':'fixture-commit'})
+        return state
+
+    def test_missing_state_database_blocks_before_recreation(self):
+        state = self.completed_task(); state.path.unlink()
+        self.assertEqual('RECOVERY_REQUIRED', recovery_status(self.directory)['status'])
+        with self.assertRaises(Blocked): require_recovered(self.directory)
+        with self.assertRaises(Blocked): backup(self.directory, self.root / 'incomplete-copy')
+        self.assertFalse(state.path.exists())
+        import orchestrate as engine
+        with patch.object(engine,'ROOT',self.root), patch.object(engine,'runtime_env',return_value={}), \
+                patch.object(engine,'toolchain'), patch.object(engine,'State') as writer, \
+                patch.object(engine,'live_preflight') as probe:
+            with self.assertRaises(Blocked): engine.run([], 1)
+            writer.assert_not_called(); probe.assert_not_called()
+
+    def test_deleted_row_stale_owner_and_commit_disagreement_block(self):
+        state = self.completed_task()
+        for sql in ("UPDATE tasks SET owner='stale'", "UPDATE tasks SET commit_id='wrong'", 'DELETE FROM tasks'):
+            with self.subTest(sql=sql):
+                with closing(sqlite3.connect(state.path)) as db: db.execute(sql); db.commit()
+                with self.assertRaises(Blocked): require_recovered(self.directory)
+                with closing(sqlite3.connect(state.path)) as db:
+                    db.execute('INSERT OR REPLACE INTO tasks VALUES (?,?,?,?,?,?)',
+                               (self.task['id'],'DONE','attempt','fixture-commit','fixture',0)); db.commit()
+
+    def test_missing_trace_database_with_completed_task_blocks(self):
+        self.completed_task(); self.journal.path.unlink()
+        with self.assertRaises(Blocked): require_recovered(self.directory)
+        self.assertFalse(self.journal.path.exists())
+
+    def test_empty_directory_and_preflight_only_history_do_not_require_task_database(self):
+        fresh = self.root / 'fresh'
+        self.assertEqual('NO_UNRESOLVED_EXECUTION', require_recovered(fresh)['status'])
+        self.assertFalse(fresh.exists())
+        policy = {'schema':1,'unit':'input_plus_output_tokens','pools':{
+            pool:{'limit_tokens':100,'invocation_allowance_tokens':50} for pool in ('codex','openrouter')}}
+        budget = Budgets(self.directory / 'budgets.sqlite', policy)
+        selection = {'provider_config':{'kind':'builtin','provider_id':'openai'}}
+        budget.reserve('probe', selection, self.task['id'], 'developer', 'preflight')
+        budget.observe('probe', {'known_input_tokens':2,'known_output_tokens':1,'status':'COMPLETE'}, final=True)
+        self.journal.append('invocation.started', session='probe', payload={'kind':'preflight'})
+        receipt = self.directory / 'model-preflight/probe.execution.json'; json_write(receipt, {'artifact_hashes':{}})
+        self.journal.append('invocation.finished', session='probe', payload={
+            'receipt':str(receipt),'sha256':sha(receipt)})
+        self.assertEqual('NO_UNRESOLVED_EXECUTION', require_recovered(self.directory)['status'])
+        budget.path.unlink()
+        with self.assertRaises(Blocked): require_recovered(self.directory)
+        self.assertFalse(budget.path.exists())
+
+    def test_gate_report_and_raw_artifact_are_both_verified_after_backup_restore(self):
+        from execution.gates import retain_static_artifacts
+        cache = self.root / 'disposable-cache'; cache.mkdir()
+        report = cache / 'pmd.xml'; report.write_text('<pmd/>')
+        run = self.directory / 'runs/attempt'; run.mkdir(parents=True)
+        retained = retain_static_artifacts(run, [report]); report.unlink()
+        stage = {'artifact_hashes':{str(retained[0]):sha(retained[0])}}
+        envelope = run / 'static.json'; json_write(envelope, stage)
+        self.journal.append('stage.completed', payload={'stage':'static','report':stage,
+            'artifact':str(envelope),'sha256':sha(envelope)})
+        destination = self.root / 'complete-backup'; backup(self.directory, destination)
+        restored = self.root / 'restored'; restore(destination, restored)
+        self.assertEqual('VERIFIED', verify_evidence(restored)['status'])
+        copied = destination / retained[0].relative_to(self.directory); copied.unlink()
+        with self.assertRaises(Blocked): verify(destination)
+
+    def test_changed_analyzer_output_cannot_be_archived_as_verified(self):
+        from execution.gates import retain_static_artifacts
+        source = self.root / 'analyzer.xml'; source.write_text('<verified/>')
+        expected = {str(source):sha(source)}
+        source.write_text('<changed/>')
+        run = self.directory / 'runs/attempt'; run.mkdir(parents=True)
+        with self.assertRaises(Blocked): retain_static_artifacts(run,[source],expected)
 
 
 if __name__ == '__main__': unittest.main()

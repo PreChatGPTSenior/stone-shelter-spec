@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plan or execute an explicitly selected local ticket batch through independent agents."""
 from __future__ import annotations
-import argparse,concurrent.futures,fcntl,json,os,sqlite3,subprocess,sys,threading,time,uuid
+import argparse,concurrent.futures,contextlib,fcntl,json,os,sqlite3,subprocess,sys,threading,time,uuid
 from pathlib import Path
 from execution.core import ROOT,Blocked,State,check_scope,command,decide_gate,identity,json_read,json_write,select_tasks,sha,tasks
 from execution.environment import configure,probe,runtime_env,start,stop,toolchain
@@ -25,7 +25,8 @@ def audit(event,task,run,payload):
  return History(ROOT/'.execution/trace.sqlite').append(event,trace=parts[0],task=task['id'],payload={**payload,'batch_id':getattr(LOCAL,'batch_id',None)})
 
 def stage(run,task,name,value):
- audit('stage.completed',task,run,{'stage':name,'report':value})
+ artifact=run/(name+'.json')
+ audit('stage.completed',task,run,{'stage':name,'report':value,'artifact':str(artifact),'sha256':sha(artifact)})
  return value
 
 def budget_guard(bindings=()):
@@ -81,7 +82,7 @@ def cycle(task,tree,run,env,stack,base):
  audit('cycle.started',task,run,{'base_commit':base,'cycle':str(run.relative_to(ROOT/'.execution'))})
  try:
   result=verify_cycle(task,tree,run,env,stack,base)
-  audit('gate.completed',task,run,result)
+  audit('gate.completed',task,run,{**result,'artifact':str(run/'gate.json'),'sha256':sha(run/'gate.json')})
   return result
  except BaseException as error:
   audit('gate.blocked',task,run,{'reason':str(error)[:500],'cycle':str(run.relative_to(ROOT/'.execution'))})
@@ -123,8 +124,11 @@ def work(task,state,coordinator,env):
   if task['kind']=='readiness':
    checks=toolchain(env)
    p=run/'readiness.json';json_write(p,{'status':'READY','covered_task_ids':[task['id']],'checks':checks,'meaning':'Feature prerequisite checked; each actual frontier is rechecked as a whole before developers run'})
-   arrive(task,json_read(p));state.set(task['id'],'DONE',owner,base)
-   audit('task.completed',task,run,{'commit':base,'kind':'readiness'});return
+   arrive(task,json_read(p))
+   with BUDGET.finalization() if BUDGET else contextlib.nullcontext():
+    state.set(task['id'],'DONE',owner,base)
+    audit('task.completed',task,run,{'commit':base,'kind':'readiness'})
+   return
   command(['git','worktree','add','-b','codex/'+task['id'].lower()+'-'+owner[:8],str(tree),base],timeout=60)
   audit('worktree.created',task,run,{'base_commit':base,'worktree':str(tree)})
   stack=configure(tree,run,owner,env)
@@ -164,10 +168,14 @@ def work(task,state,coordinator,env):
    cycle(task,tree,run/'integration',env,stack,latest)
    head=command(['git','rev-parse','HEAD'],cwd=tree).strip()
    budget_guard();audit('integration.intent',task,run,{'previous_head':latest,'candidate_commit':head})
+   budget_guard()
    command(['git','merge','--ff-only',head],cwd=coordinator,timeout=60)
-   audit('integration.completed',task,run,{'commit':head,'previous_head':latest})
-   state.set(task['id'],'DONE',owner,head,'Verified integrated candidate; no remote push')
-   audit('task.completed',task,run,{'commit':head,'kind':task['kind']})
+   # Git cannot share a transaction with accounting. A stop during merge leaves
+   # the intent unresolved and actual Git state preserved, never a false DONE.
+   with BUDGET.finalization() if BUDGET else contextlib.nullcontext():
+    audit('integration.completed',task,run,{'commit':head,'previous_head':latest})
+    state.set(task['id'],'DONE',owner,head,'Verified integrated candidate; no remote push')
+    audit('task.completed',task,run,{'commit':head,'kind':task['kind']})
  except BaseException as error:
   state.set(task['id'],'BLOCKED',owner,detail=str(error)[:500])
   audit('task.blocked',task,run,{'reason':str(error)[:500]});raise

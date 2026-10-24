@@ -179,6 +179,16 @@ class Budgets:
         if self.policy['unit'] == 'usd':
             for selection in selections: price_for(self.policy, pool_for(selection), selection['model'])
 
+    @contextmanager
+    def finalization(self):
+        """Linearize DONE publication against committed stop writers, never hold over Git."""
+        self.check_stop()
+        with self.transaction() as db:
+            row = db.execute('SELECT reason FROM stops WHERE id=1').fetchone()
+            if row:
+                raise Blocked('Budget stopped before finalization: ' + row[0])
+            yield
+
     def reserve(self, session, selection, task, role, kind):
         self.check_stop()
         pool = pool_for(selection)

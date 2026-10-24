@@ -84,6 +84,20 @@ The coordinator MUST maintain separate Codex and OpenRouter budgets, including p
 - **WHEN** the CLI reports tokens only at turn completion
 - **THEN** receipts preserve observed overrun and documentation states that cancellation cannot prevent tokens already consumed by an in-flight turn; local token/estimated-USD guards are not guaranteed provider-side monetary caps.
 
+### Requirement: Budget-aware integration finalization
+The coordinator MUST recheck the stop latch after integration intent and serialize final DONE publication with budget-stop writers. A stop recorded during Git integration MUST block DONE and preserve the unresolved intent and actual Git state for reconciliation; no automatic rollback or replay is permitted.
+
+#### Scenario: Stop at the integration boundary
+- **WHEN** a stop is recorded after intent but before merge, or while merge is executing
+- **THEN** the first case blocks merge and both cases block DONE; the latter preserves the possibly completed Git side effect for explicit recovery.
+
+### Requirement: Independent process lifetime supervision
+Each model invocation MUST run under a local supervisor that observes a coordinator-owned pipe and a bounded deadline. Coordinator death or lease closure MUST terminate the owned invocation process group, including children, without looking up stale PIDs after restart. Unknown usage MUST remain reserved. This does not guarantee cancellation of requests already accepted by a remote provider.
+
+#### Scenario: Coordinator dies during a call
+- **WHEN** the coordinator is forcibly terminated while a harmless offline stand-in is running
+- **THEN** the supervisor ends that process group within its bounded cleanup window, and recovery still blocks on unresolved invocation/accounting evidence.
+
 ### Requirement: Durable correlated execution evidence
 The coordinator MUST record ordered events with task, requirement/acceptance references, attempt, role and invocation identity. CLI tool events MUST link to redacted raw evidence. Before/after file hashes and coordinator commit events MUST connect observed changes to their invocation and result.
 
@@ -108,6 +122,14 @@ SQLite on local persistent storage MUST remain the state/history store for the s
 #### Scenario: Restore and corruption detection
 - **WHEN** an offline audit backup is restored into a fresh directory
 - **THEN** database integrity, artifact hashes and event ordering are checked, and altered/missing evidence blocks validation.
+
+#### Scenario: A database or task row is lost
+- **WHEN** retained task, invocation or usage evidence requires a missing or inconsistent state, budget or trace database
+- **THEN** recovery blocks before live calls or automatic database creation; a genuinely empty directory and a complete preflight-only history remain distinguishable.
+
+#### Scenario: Gate evidence is missing or changed
+- **WHEN** a recorded stage report, analyzer result, test result, browser artifact or gate file is removed or modified
+- **THEN** history verification, startup admission and audit backup verification reject the incomplete evidence even if invocation logs remain intact.
 
 ### Requirement: Separate USD budgets with honest accounting basis
 The coordinator MUST support separate Codex/OpenRouter USD limits while retaining tokens. Estimates MUST use integer microdollars, conservative rounding and pinned model rates. Missing/expired prices and unreconciled unit changes MUST block. Estimates MUST NOT be labelled actual subscription charges or invoices; provider cost stays unknown without qualified observations.

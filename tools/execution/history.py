@@ -67,6 +67,42 @@ def timeline(path, task=None):
     return result
 
 
+def database_state(directory, events):
+    """Cross-check retained evidence before any writer can recreate a lost database."""
+    directory = Path(directory)
+    state = read_rows(directory / 'state.sqlite', 'tasks')
+    leases = read_rows(directory / 'state.sqlite', 'leases')
+    calls = read_rows(directory / 'budgets.sqlite', 'calls')
+    stops = read_rows(directory / 'budgets.sqlite', 'stops')
+    latest, sessions = {}, set()
+    for event in events:
+        if event['event'] in ('task.claimed', 'task.completed', 'task.blocked', 'task.retry_enabled'):
+            latest[event['task']] = event
+        if event['event'] in ('invocation.started', 'invocation.finished'):
+            sessions.add(event['session'])
+    rows = {row['id']: row for row in state}
+    gaps = []
+    if latest and not (directory / 'state.sqlite').is_file():
+        gaps.append('Task history exists without state.sqlite; restore/reconcile, never recreate empty state')
+    for task, event in latest.items():
+        row = rows.get(task)
+        status = {'task.completed': 'DONE', 'task.blocked': 'BLOCKED', 'task.retry_enabled': 'RETRY'}.get(event['event'])
+        if (not row or row['owner'] != event['trace'] or (status and row['status'] != status)
+                or (status == 'DONE' and row['commit_id'] != event['payload'].get('commit'))):
+            gaps.append('Task state disagrees with retained history: ' + task)
+    recorded = {row['session'] for row in calls}
+    if sessions - recorded:
+        gaps.append('Invocation history lacks budget reservations; restore/reconcile accounting')
+    if recorded - sessions:
+        gaps.append('Budget reservations lack invocation history; reconcile before resuming')
+    usage = (directory / 'usage.jsonl').exists()
+    if usage and not (directory / 'budgets.sqlite').is_file():
+        gaps.append('Usage exists without budgets.sqlite')
+    if not events and (state or leases or calls or stops or usage):
+        gaps.append('Execution/accounting evidence lacks correlated history')
+    return state, leases, calls, stops, gaps
+
+
 def recovery_status(directory):
     """Inspection only: a stopped process is not proof that its side effects completed."""
     directory = Path(directory)
@@ -78,13 +114,10 @@ def recovery_status(directory):
         elif event['event'] == 'integration.intent': integrations[event['trace']] = event
         elif event['event'] == 'integration.completed': integrations.pop(event['trace'], None)
         elif event['event'] == 'task.completed': completed.add((event['task'], event['trace']))
-    state = read_rows(directory / 'state.sqlite', 'tasks')
-    leases = read_rows(directory / 'state.sqlite', 'leases')
-    calls = read_rows(directory / 'budgets.sqlite', 'calls')
-    stops = read_rows(directory / 'budgets.sqlite', 'stops')
+    state, leases, calls, stops, gaps = database_state(directory, events)
     active = [row for row in state if row['status'] in ('CLAIMED', 'DEVELOPING')]
     unsettled = [row for row in calls if row['state'] in ('RESERVED', 'RUNNING', 'UNKNOWN')]
-    blockers = []
+    blockers = list(gaps)
     if active or leases: blockers.append('Task/lease ownership unresolved; confirm old processes stopped, reconcile worktree and integration HEAD')
     if pending: blockers.append('Unfinished invocation; inspect last observed tool event and actual side effects; do not replay automatically')
     if integrations: blockers.append('Integration intent has no completion; compare actual Git HEAD and gate evidence before any retry')
@@ -105,6 +138,8 @@ def verify_evidence(directory, events=None):
     """Validate indexed raw events and terminal receipts; paths remain inside the audit copy."""
     directory = Path(directory)
     events = timeline(directory / 'trace.sqlite') if events is None else events
+    gaps = database_state(directory, events)[-1]
+    if gaps: raise Blocked('Incomplete audit database set: ' + '; '.join(gaps))
     def artifact(reference):
         parts = Path(reference).parts
         if any(part.lower() == 'engineering-log' for part in parts): raise Blocked('Protected evidence path')
@@ -112,18 +147,32 @@ def verify_evidence(directory, events=None):
         if not parts or parts[0] not in ('runs', 'model-preflight', 'batches'):
             raise Blocked('Evidence is outside the audit directory')
         return safe(directory, str(Path(*parts)))
+    def verify_hash(reference, expected):
+        path = artifact(reference)
+        if not path.is_file() or sha(path) != expected:
+            raise Blocked('Missing or changed audit evidence: ' + str(path))
     raw = {}
     for event in events:
         payload = event['payload']
+        if event['event'] in ('stage.completed', 'gate.completed'):
+            if 'artifact' not in payload or 'sha256' not in payload:
+                raise Blocked('Stage/gate lacks file evidence; explicit requalification required')
+            verify_hash(payload['artifact'], payload['sha256'])
+            if event['event'] == 'stage.completed':
+                report = payload.get('report', {})
+                if not report.get('artifact_hashes'):
+                    raise Blocked('Stage lacks raw evidence')
+                for reference, digest in report['artifact_hashes'].items():
+                    verify_hash(reference, digest)
         if event['event'] == 'cli.event':
             raw.setdefault(artifact(payload['raw_artifact']), {})[payload['line']] = payload['raw_event_sha256']
         if event['event'] in ('invocation.started', 'invocation.finished'):
             key, digest = ('input_artifact', 'input_sha256') if event['event'] == 'invocation.started' else ('receipt', 'sha256')
-            if key in payload and sha(artifact(payload[key])) != payload[digest]: raise Blocked('Invocation evidence changed')
+            if key in payload: verify_hash(payload[key], payload[digest])
             if event['event'] == 'invocation.finished':
                 receipt = json.loads(artifact(payload['receipt']).read_text())
                 for reference, expected_hash in receipt.get('artifact_hashes', {}).items():
-                    if sha(artifact(reference)) != expected_hash: raise Blocked('Invocation raw artifact changed')
+                    verify_hash(reference, expected_hash)
     for path, expected in raw.items():
         seen = set()
         with path.open() as stream:

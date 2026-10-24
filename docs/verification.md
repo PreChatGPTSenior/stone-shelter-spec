@@ -1,6 +1,21 @@
 # Preparation verification
 
-## Current follow-up: workflow evidence, recovery and USD
+## Current follow-up: four review corrections (T0009-013)
+
+The user authorized fixes, offline regressions and an update to PR #1. Readiness rechecked Python 3.14.8, Node 24.21.0 and npm 11.19.0 against the pins. Both USD limits and the empty price table remain unchanged. No model, coding agent, provider credential helper, application service or application acceptance test was launched.
+
+`npm run check` passed: **102 offline tests** (73 model/budget/history/supervision/workflow tests plus 29 existing coordinator regressions), with the application registry unchanged at 48 tasks, 85 requirements and 36 acceptance scenarios. `npm run check:specs` passed all **9** changes in strict mode, with zero failures.
+
+| Review finding | Observed regression evidence |
+|---|---|
+| Stop between admission and completion | A stop after intent prevents merge; a stop during actual disposable Git merge blocks DONE and retains the unresolved intent and real Git result. Finalization serializes against concurrent stop writers. |
+| Coordinator death leaves a live invocation | Real harmless Python fixtures verify coordinator SIGKILL, lease closure, independent timeout and TERM-ignoring descendants. Unknown accounting remains reserved; normal CLI-style output and nonzero exit status are preserved. |
+| Missing state database silently recreates history | Missing state/trace/accounting, deleted rows and owner/commit disagreement block recovery; the coordinator cannot construct a replacement state or run a live probe. Empty directories and complete preflight-only histories still work. |
+| Gate artifacts not checked during recovery | Missing or changed raw/stage/gate files fail inspection and backup. Complete audit relocation succeeds; retained analyzer output survives cache removal and changed bytes cannot be admitted as verified copies. |
+
+Fourteen regressions were added. The initial supervisor implementation exposed macOS empty-zombie-group signal behavior; the production fix uses a live group anchor and the same normal-exit test now passes. Fixtures use fake inference adapters, disposable Git repositories and harmless Python children only. Strict OpenSpec and current-head CI results are recorded by the publication checks; live provider qualification remains pending under T0009-007.
+
+## Published baseline: workflow evidence, recovery and USD
 
 T0009-010–T0009-012 were prepared and verified locally on 2026-10-24 after a read-only toolchain check (Python 3.14.8, Node 24.21.0, npm 11.19.0). No real agent, model request, application service/test run or model credential helper was launched. The subsequent user request explicitly authorized committing and publishing these corrections to [PR #1](https://github.com/PreChatGPTSenior/stone-shelter-spec/pull/1), with an English observability, recovery and budget description. The current operational guide is [workflow assurance](execution/workflow-assurance.md).
 

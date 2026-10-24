@@ -211,7 +211,7 @@ class AgentModelTest(unittest.TestCase):
             def wait(inner, timeout=None): return inner.returncode
             def poll(inner): return inner.returncode
 
-        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime.subprocess, 'Popen', FakeProcess):
+        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime, 'launch', FakeProcess):
             result, receipt, _, _ = invoke(selection, 'T0002-002', 'developer', self.root, self.root / 'run',
                                             'fixture', 10, iteration='attempt-1', env={}, budget=self.budget)
         value = json.loads(receipt.read_text())
@@ -221,7 +221,7 @@ class AgentModelTest(unittest.TestCase):
         self.assertGreaterEqual(value['elapsed_seconds'], 0)
         totals = usage_totals(self.root / '.execution/usage.jsonl')
         self.assertEqual(1, totals['groups'][0]['calls'])
-        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime.subprocess, 'Popen', side_effect=OSError('fixture')):
+        with patch.object(runtime, 'ROOT', self.root), patch.object(runtime, 'launch', side_effect=OSError('fixture')):
             with self.assertRaises(OSError):
                 invoke(selection, 'T0002-002', 'developer', self.root, self.root / 'failure', 'fixture', 10, env={}, budget=self.budget)
         rows = [json.loads(line) for line in (self.root / '.execution/usage.jsonl').read_text().splitlines()]

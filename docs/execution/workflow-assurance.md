@@ -15,6 +15,8 @@ This is the operating contract for the local coordinator. Verification of these 
 
 The full offline fixture replaces only external model/service/test adapters and uses a disposable Git repository. It exercises the real coordinator stage transitions, result envelopes, model admission checks with explicitly synthetic receipts, history, gate decision and merge path. A second fixture rejects code review and verifies that tests, merge and DONE never occur. No production receipt is manufactured from these fixtures.
 
+T0009-013 adds regressions for stops after integration intent and during a real disposable Git merge, serialization of finalization with stop writers, coordinator SIGKILL with harmless child/grandchild processes, missing databases/rows, and missing or changed gate evidence. Ordinary completion and an independent deadline are tested through the real local supervisor; no model executable is launched.
+
 Additional live tests are still necessary before unattended execution: each requested model's catalog/event/effort behavior; actual credential/provider errors; representative Java/React ticket including rejection/repair; actual Playwright application flows; stop/restart during a real sandboxed run; and provider-cost reconciliation. They are deliberately not run under the current prohibition. Offline tests cannot honestly replace these checks.
 
 ## Storage and authority
@@ -31,6 +33,7 @@ All runtime data is local under the execution repository's `.execution/`, outsid
 | `*.changes.json` | Observed before/after hashes of files in the ticket's write scope, linked to the invocation |
 | `*.result.json`, `*.execution.json` | Explicit agent decision plus coordinator-owned duration, usage, budget and trace metadata |
 | Stage reports / `gate.json` | Candidate identity, actor/session, raw test/browser/static artifacts and hashes, deterministic outcome |
+| `runs/<attempt>/.../static-evidence/` | Durable copies of verified analyzer outputs, independent of disposable analyzer caches |
 | `usage.jsonl` | Append-only invocation accounting rollup; not the sole recovery authority |
 | `worktrees/`, `integration/` and Git refs | Actual source changes, task branches, integration commits and retained interrupted work |
 
@@ -84,7 +87,11 @@ These commands make no provider requests. An empty timeline means no recorded ru
 | After commit or merge intent | Git objects/worktree plus intent; inspect actual HEAD before deciding whether the operation completed |
 | After DONE | State event, integration commit, completed trace and gate evidence remain available |
 
-Startup now checks recovery **before any billable preflight**. Outstanding task ownership, leases, invocations, integration intents, unknown budget usage, budget stops or legacy state without a correlated journal block launch. Expired leases are never stolen. `retry` does not clear unknown budgets or reconcile an interrupted merge. PID observations are advisory: a PID can be reused; no automatic kill is performed.
+Startup checks recovery **before any billable preflight**. Outstanding task ownership, leases, invocations, integration intents, unknown budget usage, budget stops or legacy state without a correlated journal block launch. Retained task events must agree with task rows, owners and completion commits; invocation sessions must have accounting records. Missing databases or rows block before recreation. Empty directories and complete preflight-only histories remain valid without a task database. Expired leases are never stolen. `retry` does not clear unknown budgets or reconcile an interrupted merge.
+
+Each invocation has an independent POSIX supervisor. A coordinator-owned pipe closes on coordinator death, including SIGKILL; the supervisor also enforces an independent deadline. A live group anchor preserves ownership while TERM then KILL cleans up the invocation group, including descendants that ignore TERM. The anchor's result pipe preserves the CLI exit status and standard streams. Cleanup uses live ownership, never a PID recovered from disk. The polling interval is 100 ms and TERM grace is 200 ms under normal OS scheduling. This does not undo remote requests already accepted, cover deliberately escaped process groups, or survive simultaneous supervisor/OS failure. Unknown usage stays reserved, and incomplete history still requires reconciliation.
+
+The budget is checked again after integration intent. After Git returns, final state and completion events are published while a short accounting transaction serializes them with stop writers. A committed stop before that boundary blocks DONE. A stop during merge can leave a real Git side effect: the task is BLOCKED, the intent remains unresolved and there is no automatic rollback. Finalization that completed before a later stop remains completed; delayed telemetry cannot provide retroactive pre-consumption guarantees.
 
 Recovery is conservative rather than exactly-once replay:
 
@@ -111,7 +118,7 @@ python3 tools/inspect_execution.py timeline \
   --audit-dir /absolute/private/stone-audit-restored-001 --task T0002-002
 ```
 
-Backup acquires the coordinator lock, uses SQLite's backup API, copies only allowlisted audit trees/files and records SHA-256 hashes. Restore verifies hashes, database integrity, journal chain and indexed raw events into a **new** directory; it never overwrites active state or resumes execution. Symlinks and protected paths are rejected/excluded before traversal. Use canonical paths (macOS `/var` can be a symlink). Partial copies are unusable until `verify-backup` succeeds.
+Backup acquires the coordinator lock, uses SQLite's backup API, copies only allowlisted audit trees/files and records SHA-256 hashes. History/startup/backup verification checks stage envelopes, every recorded raw artifact and the gate file, in addition to invocation evidence and database consistency. Analyzer outputs are copied from cache into the run before admission and checked against their verified hashes. Restore applies the same checks in a **new** directory; it never overwrites active state or resumes execution. Missing or damaged evidence prevents a verified export; preserve damaged originals for explicit forensic reconciliation rather than deleting them to resume. Old gate events without file hashes require requalification. Symlinks and protected paths are rejected/excluded before traversal. Use canonical paths (macOS `/var` can be a symlink). Partial copies are unusable until `verify-backup` succeeds.
 
 This is **not** a full machine/project backup: it excludes `.git`, working trees, application volumes, secret stores and model context. Source Git refs and uncommitted changes need a separate authorized source backup; databases/storage need their own application backups. A restored audit can explain history but cannot recreate source or business data it never contained. Existing absolute paths in older reports may refer to the original workspace; indexed new raw events are resolved within the audit copy. Restore-to-run relocation requires separate requalification.
 

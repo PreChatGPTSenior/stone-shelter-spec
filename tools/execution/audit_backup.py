@@ -66,7 +66,7 @@ def verify(directory):
             raise Blocked('Unapproved audit artifact path')
         if not path.is_file() or sha(path) != digest: raise Blocked('Missing or changed audit artifact: ' + name)
         if name in DATABASES: database_check(path)
-    if 'trace.sqlite' in manifest['files']: verify_evidence(directory)
+    verify_evidence(directory)
     return manifest
 
 
@@ -76,6 +76,7 @@ def backup(directory, destination):
         raise Blocked('Audit backup must be outside the active execution directory')
     if destination.exists(): raise Blocked('Backup destination must be new')
     with idle(directory):
+        verify_evidence(directory)
         destination.mkdir(parents=True, mode=0o700)
         paths = []
         for name in DATABASES:

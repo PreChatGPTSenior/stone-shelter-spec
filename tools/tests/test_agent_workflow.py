@@ -18,17 +18,22 @@ sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
 from execution.core import Blocked, State, command, json_write, sha, stable
 from execution.budgets import Budgets
 from execution.gates import report
-from execution.history import recovery_status, timeline, verify_evidence
+from execution.history import recovery_status, require_recovered, timeline, verify_evidence
+from execution.audit_backup import backup, restore
 from execution.model_policy import load, resolve, ROLES
 import execution.agent_runtime as runtime
 import orchestrate as engine
 
 
 class WorkflowTest(unittest.TestCase):
-    def exercise(self, reject_review=False):
+    def exercise(self, reject_review=False, budget_stop_at=None):
         temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
         root = Path(temporary.name).resolve() / 'repository'; root.mkdir()
-        def git(argv, cwd=None, **kwargs): return command(argv, cwd=root if cwd is None else cwd, **kwargs)
+        def git(argv, cwd=None, **kwargs):
+            result = command(argv, cwd=root if cwd is None else cwd, **kwargs)
+            if budget_stop_at == 'during_merge' and argv[:2] == ['git', 'merge']:
+                with budget.transaction() as db: budget.stop(db, 'Concurrent stop during merge')
+            return result
         git(['git', 'init', '-b', 'main']); git(['git', 'config', 'user.name', 'Offline Workflow Fixture'])
         git(['git', 'config', 'user.email', 'fixture@example.invalid'])
         (root / 'feature.txt').write_text('before')
@@ -54,6 +59,12 @@ class WorkflowTest(unittest.TestCase):
         policy = {'schema': 1, 'unit': 'input_plus_output_tokens', 'pools': {
             pool: {'limit_tokens': 10000, 'invocation_allowance_tokens': 1000} for pool in ('codex', 'openrouter')}}
         budget = Budgets(root / '.execution/budgets.sqlite', policy)
+        original_audit = engine.audit
+        def audit(event, task, run, payload):
+            result = original_audit(event, task, run, payload)
+            if budget_stop_at == 'before_merge' and event == 'integration.intent':
+                with budget.transaction() as db: budget.stop(db, 'Concurrent stop after intent')
+            return result
         state = State(root / '.execution/state.sqlite'); calls = []
         real_popen = subprocess.Popen
 
@@ -95,6 +106,8 @@ class WorkflowTest(unittest.TestCase):
                 (engine, 'MODEL_POLICY', models), (engine, 'MODEL_PRESET', 'gpt'), (engine, 'MODEL_RECEIPTS', receipts),
                 (engine, 'MODEL_ENV', {}), (engine, 'BUDGET', budget)]: stack.enter_context(patch.object(target, name, value))
             stack.enter_context(patch('subprocess.Popen', side_effect=popen))
+            stack.enter_context(patch.object(runtime, 'launch', side_effect=FakeModel))
+            stack.enter_context(patch.object(engine, 'audit', side_effect=audit))
             stack.enter_context(patch('socket.socket.connect', side_effect=AssertionError('Network forbidden')))
             stack.enter_context(patch.object(engine, 'command', side_effect=git))
             stack.enter_context(patch.object(engine, 'tasks', return_value=[task]))
@@ -105,9 +118,9 @@ class WorkflowTest(unittest.TestCase):
             stack.enter_context(patch.object(engine, 'static_gate', side_effect=static))
             selected = stack.enter_context(patch.object(engine, 'selected_tests', side_effect=tests))
             stack.enter_context(patch.object(engine, 'browser', side_effect=browser))
-            if reject_review:
+            if reject_review or budget_stop_at:
                 with self.assertRaises(Blocked): engine.work(task, state, coordinator, {})
-                selected.assert_not_called()
+                if reject_review: selected.assert_not_called()
             else: engine.work(task, state, coordinator, {})
         return root, state, calls, coordinator
 
@@ -141,6 +154,48 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual('CHANGES_REQUESTED', review['payload']['agent_decision']['status'])
         self.assertFalse(any(e['event'] == 'integration.completed' for e in events))
         self.assertEqual('before', (coordinator / 'feature.txt').read_text())
+
+    def test_stop_after_intent_blocks_merge_and_done(self):
+        root, state, _, coordinator = self.exercise(budget_stop_at='before_merge')
+        self.assertEqual('BLOCKED', state.status()['T0002-002']['status'])
+        self.assertEqual('before', (coordinator / 'feature.txt').read_text())
+        events = timeline(root / '.execution/trace.sqlite')
+        self.assertFalse(any(e['event'] in ('integration.completed', 'task.completed') for e in events))
+
+    def test_stop_during_merge_preserves_git_side_effect_without_done(self):
+        root, state, _, coordinator = self.exercise(budget_stop_at='during_merge')
+        self.assertEqual('BLOCKED', state.status()['T0002-002']['status'])
+        self.assertEqual('after', (coordinator / 'feature.txt').read_text())
+        report = recovery_status(root / '.execution')
+        self.assertEqual(1, len(report['unfinished_integrations']))
+        with self.assertRaises(Blocked): require_recovered(root / '.execution')
+
+    def test_gate_evidence_and_backups_survive_relocation_but_reject_loss_or_tampering(self):
+        root, _, _, _ = self.exercise()
+        directory = root / '.execution'; destination = root / 'audit-copy'
+        backup(directory, destination)
+        restored = root / 'restored-audit'; restore(destination, restored)
+        self.assertEqual('VERIFIED', verify_evidence(restored)['status'])
+        events = timeline(directory / 'trace.sqlite')
+        # Raw results plus stage and gate envelopes must all be checked.
+        paths = set()
+        for event in events:
+            if event['event'] in ('stage.completed', 'gate.completed'):
+                paths.add(Path(event['payload']['artifact']))
+                if event['event'] == 'stage.completed':
+                    paths.update(Path(p) for p in event['payload']['report']['artifact_hashes'])
+        for path in sorted(paths):
+            with self.subTest(path=path.name):
+                original = path.read_bytes()
+                path.unlink()
+                with self.assertRaises(Blocked): require_recovered(directory)
+                path.write_bytes(original + b'corrupted')
+                with self.assertRaises(Blocked): verify_evidence(directory)
+                path.write_bytes(original)
+        static = next(e for e in events if e['event']=='stage.completed' and e['payload']['stage']=='static')
+        Path(next(iter(static['payload']['report']['artifact_hashes']))).unlink()
+        with self.assertRaises(Blocked): backup(directory, root / 'bad-copy')
+        self.assertFalse((root / 'bad-copy').exists())
 
 
 if __name__ == '__main__': unittest.main()

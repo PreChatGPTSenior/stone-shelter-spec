@@ -21,6 +21,7 @@ from .core import ROOT, Blocked, command, files, json_read, json_write, sha, sta
 from .history import History
 from .money import dollars, micros
 from .model_policy import cli_args
+from .supervision import close_lease, launch
 
 
 def utc():
@@ -171,11 +172,10 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
                                'input_artifact': reference(input_path), 'input_sha256': sha(input_path)})
     try:
         with private_stream(log) as stdout, private_stream(errors) as stderr:
-            process = subprocess.Popen(argv, cwd=workspace, env=env, stdin=subprocess.PIPE,
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       text=True, start_new_session=True)
+            process = launch(argv, cwd=workspace, env=env, timeout=timeout)
             emit('invocation.process_started', {'pid': getattr(process, 'pid', None),
-                                                'identity': 'PID observation only; do not kill a reused PID'})
+                                                'identity': 'Live supervisor; coordinator pipe owns lifetime, never kill this saved PID',
+                                                'supervision': 'parent-pipe EOF and independent deadline'})
 
             def drain(source, destination, events=False):
                 try:
@@ -246,6 +246,7 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
                     reader_errors.append('Incomplete event stream')
                 code = process.returncode
     finally:
+        if process is not None: close_lease(process)
         try:
             if output.is_file():
                 output.write_text(redact(output.read_text(), env, selection))
