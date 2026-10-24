@@ -8,7 +8,8 @@
     "npm": "11.19.0"
   },
   "scripts": {
-    "check": "python3 tools/validate_execution.py && python3 -m unittest discover -s tools/tests -p test_execution.py",
+    "check": "python3 tools/validate_execution.py && python3 -m unittest discover -s tools/tests -p test_execution.py && npm run check:models",
+    "check:models": "python3 -m unittest discover -s tools/tests -p 'test_agent_*.py'",
     "openspec": "openspec",
     "check:specs": "openspec validate --all --strict",
     "plan": "python3 tools/orchestrate.py plan",

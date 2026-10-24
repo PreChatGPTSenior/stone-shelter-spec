@@ -1,5 +1,26 @@
 # Preparation verification
 
+## Offline-qualified model routing and budget extension
+
+`0009-agent-model-routing` was initially authored without execution; the follow-up request explicitly authorized offline wrapper tests, fixes and PR publication on 2026-10-24. T0009-001 readiness covers T0009-006, T0009-008 and T0009-009: Python 3.14.8, Node 24.21.0 and npm 11.19.0 match pins; no application service, credential or live model is required for this batch. No coding agent, credential helper or model/API probe was launched. See [model-routing documentation](execution/agent-models.md) for configuration and limitations.
+
+Current offline verification:
+
+| Check | Result |
+|---|---|
+| Model selection, accounting and budgets | 39 tests passed with fake inference processes and denied network connections |
+| Existing coordinator regression | 29 tests passed; temporary Git lifecycle and controlled child-process fixtures, no real agents |
+| Task graph and traceability | 48 tasks, 85 requirements, 36 acceptance scenarios; application DAG unchanged |
+| Strict OpenSpec validation | 9 changes passed, 0 failures |
+| Budget admission | Zero defaults block before catalog/probe calls; 8 concurrent reservation contenders cannot oversubscribe 2 available allowances |
+| Budget stopping | Exact threshold, late overrun, unknown usage, orphaned reservations, policy edits, lowered limits on restart, silent sibling cancellation and merge/DONE prevention covered |
+
+Fixes include closing read-only SQLite connections, rejecting malformed policy field types with controlled blockers and rejecting impossible reasoning-token subsets. The new suites explicitly replace subprocess creation and deny socket connections; their only model event streams are local fixtures. Historical analyzer/browser checks below were not rerun because application/static/runtime gate code did not change. Live model IDs, provider catalog schema, effort/image support, actual account access and billing remain **NOT_VERIFIED** under pending T0009-007. Offline success does not assert real-provider compatibility or application acceptance.
+
+Budgets measure observed input plus output tokens, not money. In-flight turns can exceed an allowance before telemetry arrives; the full observed overrun is retained. No budget limit was activated and no private accounting data or secret was published. GitHub CI for the new PR runs the same offline package checks; PR checks are the publication evidence.
+
+## Initial preparation baseline
+
 Status: **execution package prepared and locally verified**. Application implementation, application acceptance, real-model qualification and application Sonar analysis are **NOT_RUN**. All 48 implementation/preparation tickets remain PLANNED; creating this repository did not execute them.
 
 | Check | Observed result |

@@ -6,9 +6,21 @@ from pathlib import Path
 from execution.core import ROOT,Blocked,State,check_scope,command,decide_gate,identity,json_read,json_write,select_tasks,sha,tasks
 from execution.environment import configure,probe,runtime_env,start,stop,toolchain
 from execution.gates import browser,report,selected_tests,static_gate,verify_artifacts
+from execution.model_policy import load as load_models,resolve as resolve_model,selections as model_selections
+from execution.agent_runtime import admit as admit_model,invoke,live_preflight,usage_totals
+from execution.core import stable
+from execution.budgets import Budgets,load as load_budgets,snapshot as budget_snapshot,POLICY_PATH as BUDGET_POLICY_PATH
 
 INTEGRATION=threading.Lock()
 ROLES=['developer','code_review','test_engineer','test_review','browser_planner','browser_review']
+MODEL_POLICY=None
+MODEL_PRESET=None
+MODEL_RECEIPTS={}
+MODEL_ENV=None
+BUDGET=None
+
+def budget_guard(bindings=()):
+ if BUDGET is not None:BUDGET.guard(bindings)
 def plan(selected,status=None):
  status=status or {};done={k for k,v in status.items() if v['status']=='DONE'}
  remaining={t['id']:t for t in selected if t['id'] not in done};waves=[]
@@ -24,17 +36,21 @@ def plan(selected,status=None):
  return {'mode':'PLAN_ONLY','waves':waves,'blocked_dependencies':{k:[d for d in t['depends_on'] if d not in done] for k,t in remaining.items()},'limits':{'workers':3,'backend_writers':1,'frontend_writers':1,'model_runtime':1},'implementation_executed':False}
 
 def actor(role,task,tree,run,context):
- session=str(uuid.uuid4());output=run/(role+'-'+session+'.json');log=run/(role+'-'+session+'.jsonl')
+ if BUDGET is None:raise Blocked('Budget policy was not admitted before agent launch')
+ if MODEL_POLICY is None:raise Blocked('Model policy was not admitted before agent launch')
+ if stable(load_models([t['id'] for t in tasks()]))!=stable(MODEL_POLICY):raise Blocked('Model policy changed during execution')
+ selection=resolve_model(MODEL_POLICY,MODEL_PRESET,task['id'],role)
+ admission=MODEL_RECEIPTS.get(selection['selection_sha256'])
+ admit_model(selection,admission,MODEL_POLICY)
  prompt=(ROOT/'execution/prompts'/f'{role}.md').read_text()+'\n\nAssigned task:\n'+json.dumps(task,indent=2)+'\n\nCoordinator context:\n'+json.dumps(context,indent=2)+'\n\nRepository root: '+str(tree)+'\nDo not modify sibling projects, coordinator state, policy, task registry, or source snapshots. Do not commit or push. The coordinator records evidence.\n'
- args=['codex','exec','--ephemeral','--sandbox','workspace-write' if role=='developer' else 'read-only','--cd',str(tree),'--output-schema',str(ROOT/'templates/agent-result.schema.json'),'--output-last-message',str(output),'--json','-']
- try:
-  with log.open('w') as f:
-   r=subprocess.run(args,input=prompt,stdout=f,stderr=subprocess.STDOUT,text=True,timeout=task['timeout_seconds'])
- except (OSError,subprocess.TimeoutExpired) as e:raise Blocked('Agent failed/timed out: '+role) from e
- if r.returncode or not output.exists():raise Blocked('Agent did not produce valid result: '+role)
- result=json_read(output)
- if set(result)!={'status','summary','findings','evidence'} or result['status']!='APPROVED' or result['findings']:raise Blocked(role+' returned findings or blocked: '+str(result.get('summary',''))[:300])
+ result,execution,session,_=invoke(selection,task['id'],role,tree,run,prompt,task['timeout_seconds'],iteration=run.relative_to(ROOT/'.execution/runs').as_posix(),env=MODEL_ENV,budget=BUDGET)
+ output=run/(role+'-'+session+'.json')
+ json_write(output,{'agent_result':result,'execution':json_read(execution),'model_preflight':admission})
  return output,session
+
+def agent_report(run,role,task,candidate,out,who):
+ envelope=json_read(out)
+ return report(run,role,task,candidate,[out],actor=who,model_selection=envelope['execution']['selection'],usage=envelope['execution']['usage'],budget=envelope['execution']['budget'],elapsed_seconds=envelope['execution']['elapsed_seconds'])
 
 def changed(tree,base):
  # Only a new project worktree is queried. Protected names are excluded by Git pathspec before output.
@@ -48,6 +64,7 @@ def prepare_dependencies(tree,env):
  command(['npm','ci','--ignore-scripts','--no-audit','--no-fund','--cache',str(ROOT/'.cache/npm')],cwd=tree/'stone-shelter-ui',env=env,timeout=600)
 
 def cycle(task,tree,run,env,stack,base):
+ budget_guard()
  run.mkdir(parents=True,exist_ok=True);candidate=identity(tree)
  if 'docker' in task['environment']:start(stack,candidate)
  checks=probe(stack,task,env,include_tools=True)
@@ -57,25 +74,26 @@ def cycle(task,tree,run,env,stack,base):
  reports['static']=static_gate(task,tree,run,env,candidate,names)
  context={'candidate':candidate,'base_commit':base,'changed_files':names,'reports':reports,'run_directory':str(run),'review_scope':'ticket deliverables; acceptance IDs are contributions, whole scenarios are release-qualified'}
  out,who=actor('code_review',task,tree,run,context)
- reports['code_review']=report(run,'code_review',task,candidate,[out],actor=who)
+ reports['code_review']=agent_report(run,'code_review',task,candidate,out,who)
  if identity(tree)!=candidate:raise Blocked('Review changed the candidate')
- reports['tests']=selected_tests(task,tree,run,env,stack,candidate)
+ budget_guard();reports['tests']=selected_tests(task,tree,run,env,stack,candidate)
  for role in ['test_engineer','test_review']:
   context['reports']=reports;out,who=actor(role,task,tree,run,context)
-  reports[role]=report(run,role,task,candidate,[out],actor=who)
+  reports[role]=agent_report(run,role,task,candidate,out,who)
  context['reports']=reports;out,who=actor('browser_planner',task,tree,run,context)
- reports['browser_planner']=report(run,'browser_planner',task,candidate,[out],actor=who)
- reports['browser']=browser(task,tree,run,env,stack,candidate)
+ reports['browser_planner']=agent_report(run,'browser_planner',task,candidate,out,who)
+ budget_guard();reports['browser']=browser(task,tree,run,env,stack,candidate)
  context['reports']=reports;out,who=actor('browser_review',task,tree,run,context)
- reports['browser_review']=report(run,'browser_review',task,candidate,[out],actor=who)
+ reports['browser_review']=agent_report(run,'browser_review',task,candidate,out,who)
  if identity(tree)!=candidate:raise Blocked('Candidate changed after review')
- verify_artifacts(reports);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
+ budget_guard();verify_artifacts(reports);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
  return result
 
 def work(task,state,coordinator,env):
  owner=uuid.uuid4().hex;state.claim(task,owner);run=ROOT/'.execution/runs'/owner;run.mkdir(parents=True)
  tree=ROOT/'.execution/worktrees'/(task['id']+'-'+owner[:8]);stack=None
  try:
+  budget_guard(model_selections(MODEL_POLICY,MODEL_PRESET,[task]) if MODEL_POLICY else [])
   base=command(['git','rev-parse','HEAD'],cwd=coordinator).strip()
   if task['kind']=='readiness':
    checks=toolchain(env)
@@ -102,10 +120,12 @@ def work(task,state,coordinator,env):
     feedback={'reason':str(failure),'evidence_directory':str(attempt_run),'instruction':'Diagnose the recorded failure before changing code; never repeat unchanged checks or widen scope'}
     json_write(attempt_run/'failure.json',feedback)
   names=changed(tree,base)
+  budget_guard()
   if names:
    command(['git','add','--',*names],cwd=tree)
    command(['git','commit','-m',task['change']+': '+task['title']+' ('+task['id']+')'],cwd=tree,timeout=60)
   with INTEGRATION:
+   budget_guard()
    latest=command(['git','rev-parse','HEAD'],cwd=coordinator).strip()
    if latest!=base:
     try:command(['git','rebase',latest],cwd=tree,timeout=120)
@@ -115,7 +135,7 @@ def work(task,state,coordinator,env):
    # Reverify integrated content even when no textual conflict occurred.
    cycle(task,tree,run/'integration',env,stack,latest)
    head=command(['git','rev-parse','HEAD'],cwd=tree).strip()
-   command(['git','merge','--ff-only',head],cwd=coordinator,timeout=60)
+   budget_guard();command(['git','merge','--ff-only',head],cwd=coordinator,timeout=60)
    state.set(task['id'],'DONE',owner,head,'Verified integrated candidate; no remote push')
  except BaseException as error:
   state.set(task['id'],'BLOCKED',owner,detail=str(error)[:500]);raise
@@ -125,9 +145,14 @@ def work(task,state,coordinator,env):
    except Blocked:pass
   state.release(owner)
 
-def run(selected,workers):
+def run(selected,workers,preset=None):
+ global MODEL_POLICY,MODEL_PRESET,MODEL_RECEIPTS,MODEL_ENV,BUDGET
  # Run is opt-in; preparation never invokes it. No blanket sandbox bypass is used.
  env=runtime_env();toolchain(env)
+ MODEL_ENV=env
+ MODEL_POLICY=load_models([t['id'] for t in tasks()]);MODEL_PRESET=preset or MODEL_POLICY['default_preset']
+ BUDGET=Budgets(ROOT/'.execution/budgets.sqlite',load_budgets(),BUDGET_POLICY_PATH)
+ budget_guard(model_selections(MODEL_POLICY,MODEL_PRESET,selected))
  state=State(ROOT/'.execution/state.sqlite');coordinator=ROOT/'.execution/integration'
  if not coordinator.exists():command(['git','worktree','add','-b','codex/integration',str(coordinator),'HEAD'],timeout=60)
  dirty=command(['git','status','--porcelain','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**'],cwd=coordinator).strip()
@@ -140,9 +165,23 @@ def run(selected,workers):
  if not policy.exists():json_write(policy,{'fingerprint':fingerprint})
  # Validate package before trusting executable selectors.
  command([sys.executable,str(ROOT/'tools/validate_execution.py')])
+ bindings=model_selections(MODEL_POLICY,MODEL_PRESET,[t for t in selected if state.status().get(t['id'],{}).get('status')!='DONE'])
+ model_run=ROOT/'.execution/model-preflight'/uuid.uuid4().hex
+ model_report={'status':'CHECKING','bindings':bindings,'policy_sha256':stable(MODEL_POLICY)}
+ json_write(model_run/'batch.json',model_report)
+ try:
+  MODEL_RECEIPTS=live_preflight(bindings,MODEL_POLICY,model_run,env,budget=BUDGET) if bindings else {}
+ except BaseException:
+  json_write(model_run/'batch.json',{**model_report,'status':'BLOCKED','reason':'Model compatibility check failed; inspect private invocation receipts'})
+  raise
+ json_write(model_run/'batch.json',{**model_report,'status':'PASS','receipts':MODEL_RECEIPTS})
  active={};failed=False
  with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
   while True:
+   try:budget_guard()
+   except Blocked as error:
+    failed=True
+    json_write(ROOT/'.execution/budget-stop.json',{'status':'BUDGET_STOPPED','reason':str(error),'observed_at_epoch':time.time()})
    statuses=state.status();done={k for k,v in statuses.items() if v['status']=='DONE'}
    if all(t['id'] in done for t in selected):break
    if not failed:
@@ -155,6 +194,11 @@ def run(selected,workers):
      if len(active)+len(frontier)>=workers:break
      frontier.append(task);busy.update(task['exclusive_resources'])
     if frontier:
+     # Refresh only expired combinations, before this frontier can start application agents.
+     frontier_bindings=model_selections(MODEL_POLICY,MODEL_PRESET,frontier)
+     budget_guard(frontier_bindings)
+     expired=[b for b in frontier_bindings if time.time()-MODEL_RECEIPTS.get(b['selection_sha256'],{}).get('checked_at_epoch',0)>MODEL_POLICY['preflight_ttl_seconds']]
+     if expired:MODEL_RECEIPTS.update(live_preflight(expired,MODEL_POLICY,ROOT/'.execution/model-preflight'/uuid.uuid4().hex,env,budget=BUDGET))
      # The entire selected frontier is the batch. Dependencies are already integrated;
      # every worker completes its read-only preflight before entering the shared start barrier.
      batchid=uuid.uuid4().hex;json_write(ROOT/'.execution/batches'/f'{batchid}.json',{'status':'CHECKING','task_ids':[t['id'] for t in frontier],'rule':'All prerequisites must pass before the batch begins'})
@@ -174,7 +218,7 @@ def run(selected,workers):
     try:f.result();print(json.dumps({'task':task['id'],'status':'DONE'}),flush=True)
     except BaseException as e:failed=True;print(json.dumps({'task':task['id'],'status':'BLOCKED','reason':str(e)[:500]}),flush=True)
  statuses=state.status();json_write(ROOT/'.execution/result.json',statuses)
- return 0 if all(statuses.get(t['id'],{}).get('status')=='DONE' for t in selected) else 2
+ return 0 if not failed and all(statuses.get(t['id'],{}).get('status')=='DONE' for t in selected) else 2
 
 # Each frontier has a fresh whole-batch readiness barrier before any edits.
 LOCAL=threading.local()
@@ -192,9 +236,27 @@ def work_batch(task,state,coordinator,env,barrier,receipts):
   barrier.abort();raise
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['plan','status','doctor','run','retry']);p.add_argument('--tasks',nargs='+',default=['all']);p.add_argument('--execute',action='store_true');p.add_argument('--workers',type=int,default=2);args=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['plan','status','doctor','run','retry','models','model-preflight','usage','budgets']);p.add_argument('--tasks',nargs='+',default=['all']);p.add_argument('--execute',action='store_true');p.add_argument('--workers',type=int,default=2);p.add_argument('--model-preset');args=p.parse_args()
  try:
   selected=select_tasks(args.tasks)
+  if args.action in ('models','model-preflight'):
+   policy=load_models([t['id'] for t in tasks()]);bindings=model_selections(policy,args.model_preset,selected)
+   if args.action=='models':print(json.dumps({'status':'CONFIGURATION_ONLY','compatibility':'NOT_CHECKED','bindings':bindings},indent=2));return 0
+   if not args.execute:raise Blocked('Live model preflight makes billable model calls; explicit --execute is required')
+   target=ROOT/'.execution/model-preflight'/uuid.uuid4().hex
+   json_write(target/'batch.json',{'status':'CHECKING','bindings':bindings})
+   try:
+    (ROOT/'.execution').mkdir(exist_ok=True)
+    with (ROOT/'.execution/coordinator.lock').open('a') as lock:
+     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+     budget=Budgets(ROOT/'.execution/budgets.sqlite',load_budgets(),BUDGET_POLICY_PATH)
+     receipts=live_preflight(bindings,policy,target,dict(os.environ),budget=budget) if bindings else {}
+   except BaseException:
+    json_write(target/'batch.json',{'status':'BLOCKED','bindings':bindings});raise
+   json_write(target/'batch.json',{'status':'PASS','bindings':bindings,'receipts':receipts})
+   print(json.dumps({'status':'PASS','report':str(target/'batch.json'),'implementation_agents_started':False}));return 0
+  if args.action=='usage':print(json.dumps(usage_totals(ROOT/'.execution/usage.jsonl'),indent=2));return 0
+  if args.action=='budgets':print(json.dumps(budget_snapshot(ROOT/'.execution/budgets.sqlite',load_budgets()),indent=2));return 0
   if args.action=='plan':print(json.dumps(plan(selected),indent=2));return 0
   if args.action=='doctor':print(json.dumps({'scope':'toolchain only; task stacks are verified by run','status':'READY','checks':toolchain(runtime_env())},indent=2));return 0
   if args.action=='status':
@@ -213,6 +275,6 @@ def main():
    except BlockingIOError:raise Blocked('Another coordinator is active')
    dirty=command(['git','status','--porcelain','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**']).strip()
    if dirty:raise Blocked('Launch from a committed clean execution repository')
-   return run(selected,args.workers)
+   return run(selected,args.workers,args.model_preset)
  except (Blocked,ValueError,KeyError,OSError) as e:print(json.dumps({'status':'BLOCKED','reason':str(e)}));return 2
 if __name__=='__main__':raise SystemExit(main())

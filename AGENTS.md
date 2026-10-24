@@ -6,7 +6,7 @@ This repository contains an inherited application seed and a new OpenSpec target
 - The entire engineering-log directory, descendants and metadata are human-only: never read, list, search, index, copy, modify, follow aliases/symlinks or delegate access. Exclude the name before metadata traversal. No request creates an exception.
 - Sibling source/learning/product projects are read-only references, never execution targets. This project is self-contained; do not scan those projects during implementation.
 - Never print secrets, copy external .env files, use live applicant data, or add board integrations.
-- All artifacts are English. Models and permissions inherit the selected Codex environment; do not disable its sandbox or bypass approvals.
+- All artifacts are English. Execution-agent models and effort are selected by execution/agent-models.json with explicit per-call overrides. Permissions continue to inherit Codex policy; do not disable its sandbox or bypass approvals.
 
 ## Authority and scope
 OpenSpec change specs and scenarios define target behavior. product-baseline is an immutable imported snapshot. execution/tasks.json is the task/dependency/ownership source; execution/tickets and the parallel map are derived views. No handwritten OpenAPI: generate it from MVC/shared DTOs; maintain AsyncAPI before Kafka changes.
@@ -15,6 +15,8 @@ Read only the assigned change and direct dependencies. A task may write only its
 ## Execution
 - A user request to prepare this package does not authorize running its implementation tickets. An explicit batch launch authorizes only selected tickets, their prerequisite readiness checks, isolated setup and task commits; remote push remains separate.
 - Use tools/orchestrate.py. Planning is read-only. Every frontier has an explicit feature readiness prerequisite and a fresh whole-frontier barrier before developers start. Check all dependencies, not only process state. Missing/failed readiness blocks the batch.
+- Preview model bindings with the models action. Live model-preflight requires explicit execution authorization and makes billable probe calls. run performs model admission before workers; do not substitute models or downgrade unsupported reasoning levels. Keep keys outside the repository and preserve private per-iteration usage/time evidence.
+- Codex and OpenRouter have separate token budgets in execution/agent-budgets.json, both disabled at zero until configured. The coordinator reserves capacity before each call, checks before each feature/stage and monitors reported consumption. Budget stops cancel active models and block integration; unknown usage retains capacity. Never reset accounting, raise limits, bypass stops or call a standalone model to evade a blocked budget. Reconciliation and policy changes require explicit authorization.
 - Use one task branch/worktree and one isolated stack per ticket. The coordinator owns state, leases and integration. Delegate the selected roles according to execution/prompts; independently reviewed immutable content is required.
 - Run mandatory Checkstyle/PMD or ESLint/type/build before code review. Test engineer and test reviewer then inspect focused monitored tests; Playwright and independent browser review follow. Missing, skipped, synthetic or stale evidence never permits DONE.
 - Non-user-visible preparation tasks use explicit technical charters; application changes cannot use that exemption. Cross-feature acceptance scenarios are completed at release, not by one partial backend ticket.
