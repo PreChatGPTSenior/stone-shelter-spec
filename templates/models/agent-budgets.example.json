@@ -1,8 +1,9 @@
 {
-  "schema": 1,
-  "unit": "input_plus_output_tokens",
+  "schema": 2,
+  "unit": "usd",
   "pools": {
-    "codex": {"limit_tokens": 1000000, "invocation_allowance_tokens": 100000},
-    "openrouter": {"limit_tokens": 500000, "invocation_allowance_tokens": 100000}
-  }
+    "codex": {"limit_usd": "20.00", "invocation_allowance_usd": "1.00"},
+    "openrouter": {"limit_usd": "10.00", "invocation_allowance_usd": "1.00"}
+  },
+  "prices": {}
 }

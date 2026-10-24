@@ -9,7 +9,9 @@ Independent Codex processes previously inherited one implicit model configuratio
 - Require exact catalog capability checks and a bounded real CLI tool/schema/usage probe before authorized implementation starts.
 - Record coordinator-owned model selection, per-turn token usage and timing for every invocation, including failed attempts and preflight.
 - Add inactive examples and focused offline tests; qualify offline under the follow-up authorization while leaving live agents/model calls unperformed.
-- Add separate persistent Codex/OpenRouter token budgets, atomic reservations, feature/call checks and cross-pool cancellation on a budget stop.
+- Add separate persistent Codex/OpenRouter token or USD-estimate budgets, atomic reservations, feature/call checks and cross-pool cancellation.
+- Add correlated tool/workflow history, attribution, startup recovery checks and verified audit backup/restore without automatic replay.
+- Qualify complete coordinator handoffs with fake models and actual local process-death/Git fixtures; retain real-provider qualification as pending.
 
 ## Capabilities
 

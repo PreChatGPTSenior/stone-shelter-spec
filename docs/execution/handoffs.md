@@ -28,6 +28,8 @@ The coordinator writes status; developers/reviewers only return schema-shaped re
 
 Each invocation envelope also carries the budget pool, reserved allowance, observed tokens, settlement state and stop reason. Both limits default to zero. Retries preserve spending; unknown usage and orphaned reservations stop execution pending explicit accounting reconciliation. Turn-end reporting may reveal an already-consumed overrun; no receipt claims a provider-side monetary cap. Local tests already running may finish, but a budget stop prevents their results from advancing to integration.
 
+Schema 2 adds explicit USD estimates with snapshotted rates while keeping tokens. Correlated history links requirement/acceptance IDs, batch, attempt, role/session, observed tool items, changed-file hashes, gate evidence and Git integration. Startup blocks unresolved ownership, invocations and merge intents before model preflight. Use [workflow assurance and recovery](workflow-assurance.md) for timeline/backup commands and the limits of offline proof; audit restore never silently resumes a model or task.
+
 ## Partial task versus full feature acceptance
 
 Acceptance A01–A36 spans multiple layers. A backend task proves its assigned contribution and a current real-browser regression; it cannot claim a later UI is complete. Feature qualification and the final release ticket cover the complete scenarios. Technical preparation tasks have explicit non-UI charters and cannot introduce user-visible behavior under that exemption.

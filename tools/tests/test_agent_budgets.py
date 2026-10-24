@@ -44,7 +44,7 @@ class BudgetTest(unittest.TestCase):
 
     def test_default_zero_disables_both_providers_without_database_or_process(self):
         default = load()
-        self.assertEqual([0, 0], [p['limit_tokens'] for p in default['pools'].values()])
+        self.assertEqual(['0.00', '0.00'], [p['limit_usd'] for p in default['pools'].values()])
         path = self.root / 'absent.sqlite'
         self.assertEqual('NOT_STARTED', snapshot(path, default)['status'])
         self.assertFalse(path.exists())
@@ -211,7 +211,7 @@ class BudgetTest(unittest.TestCase):
                 patch.object(engine, 'command') as command, patch.object(engine, 'selected_tests') as tests:
             with self.assertRaises(Blocked): engine.work(task, state, self.root, {})
             command.assert_not_called()
-            with self.assertRaises(Blocked): engine.cycle(task, self.root, self.root, {}, {}, 'base')
+            with self.assertRaises(Blocked): engine.cycle(task, self.root, self.root / '.execution/runs/fixture', {}, {}, 'base')
             tests.assert_not_called()
         self.assertEqual('BLOCKED', state.status()[task['id']]['status'])
 

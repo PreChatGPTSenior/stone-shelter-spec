@@ -1,10 +1,30 @@
 # Preparation verification
 
-## Offline-qualified model routing and budget extension
+## Current follow-up: workflow evidence, recovery and USD
+
+T0009-010–T0009-012 were prepared and verified locally on 2026-10-24 after a read-only toolchain check (Python 3.14.8, Node 24.21.0, npm 11.19.0). No real agent, model request, application service/test run or model credential helper was launched. The subsequent user request explicitly authorized committing and publishing these corrections to [PR #1](https://github.com/PreChatGPTSenior/stone-shelter-spec/pull/1), with an English observability, recovery and budget description. The current operational guide is [workflow assurance](execution/workflow-assurance.md).
+
+| Check | Observed result |
+|---|---|
+| Model/budget/history/workflow suites | **59 passed**: previous 39 plus 8 USD, 10 history/recovery and 2 complete workflow fixtures |
+| Existing coordinator regression | **29 passed**; total **88 offline tests** |
+| Strict OpenSpec | **9 passed**, 0 failures; overly long requirement paragraphs were split into focused requirements/scenarios |
+| Updated planning/execution skills | Both passed the installed skill validator |
+| USD admission/arithmetic | Independent pools, decimal/microdollar rounding, cached-token treatment, price expiry, unknown cost, concurrent reservations and unit-migration blocking covered |
+| Persistence and recovery | Actual local Python process exits preserve committed events/claims and roll back uncommitted writes; unresolved calls/leases/integration block; backup/restore verifies hashes and databases |
+| Workflow/attribution | Fake-model complete workflow exercises actual handoffs, unique sessions, observed tool indexing, before/after hashes, candidate gates and disposable Git merge; review rejection prevents tests/merge/DONE |
+| Audit inspection | Current real execution area reports zero events and no task/model runs; this is NOT application acceptance |
+| Default budget status | USD mode, both limits 0.00, empty price table, provider cost unknown; no spending activated |
+
+Inference is faked in all model tests. Crash fixtures run small local Python processes; workflow fixtures create disposable local Git commits, not commits in this repository. The strict path validator initially rejected the macOS `/var` alias in temporary fixtures; fixtures now use canonical newly-created directories while production symlink rejection remains enforced. Raw final results, inputs, logs and change manifests are hashed so post-run tampering is detected.
+
+The baseline PR/CI below is **historical evidence for the previous version**. The current-head checks on PR #1 are the source of publication validation for this follow-up; the local results above do not substitute for them. Live qualification remains pending. Full machine/data recovery, automatic task/accounting reconciliation, distributed coordination and actual provider-bill reconciliation are not implemented or claimed; their limits and operational prerequisites are documented in the assurance guide.
+
+## Published model-routing and token-budget baseline
 
 `0009-agent-model-routing` was initially authored without execution; the follow-up request explicitly authorized offline wrapper tests, fixes and PR publication on 2026-10-24. T0009-001 readiness covers T0009-006, T0009-008 and T0009-009: Python 3.14.8, Node 24.21.0 and npm 11.19.0 match pins; no application service, credential or live model is required for this batch. No coding agent, credential helper or model/API probe was launched. See [model-routing documentation](execution/agent-models.md) for configuration and limitations.
 
-Current offline verification:
+Published-baseline offline verification (before the local follow-up above):
 
 | Check | Result |
 |---|---|

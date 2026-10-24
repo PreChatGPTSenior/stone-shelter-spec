@@ -62,7 +62,11 @@ Preparing configuration and code MUST NOT launch application agents, call model 
 - **THEN** tests use fake inference processes and temporary ledgers, live qualification remains pending, and only the wrapper change is published.
 
 ### Requirement: Independent persistent provider budgets
-The coordinator MUST maintain separate Codex and OpenRouter budgets measured in observed input plus output tokens, including probes, repairs and integration reviews. Limits default to zero until configured. Provider routing, not model name, determines the pool. Consumption MUST persist across retries, presets and coordinator restarts; one pool MUST NOT borrow from the other. Unknown usage MUST NOT become free usage. Currency cost and account quota MUST NOT be inferred from tokens.
+The coordinator MUST maintain separate Codex and OpenRouter budgets, including probes, repairs and integration reviews. Limits default to zero. Routing determines the pool. Consumption MUST survive retries, presets and restarts, without borrowing between pools or treating unknown usage as free.
+
+#### Scenario: Accounting mode
+- **WHEN** a budget policy selects its accounting unit
+- **THEN** schema 1 enforces input-plus-output tokens and schema 2 enforces configured USD estimates while retaining token counts; neither mode infers actual invoices or account quota.
 
 #### Scenario: Feature admission and concurrent calls
 - **WHEN** a feature/frontier or any model invocation is about to start
@@ -78,4 +82,40 @@ The coordinator MUST maintain separate Codex and OpenRouter budgets measured in 
 
 #### Scenario: Delayed telemetry
 - **WHEN** the CLI reports tokens only at turn completion
-- **THEN** receipts preserve observed overrun and documentation states that cancellation cannot prevent tokens already consumed by an in-flight turn; this is a local token guard, not a guaranteed provider-side monetary cap.
+- **THEN** receipts preserve observed overrun and documentation states that cancellation cannot prevent tokens already consumed by an in-flight turn; local token/estimated-USD guards are not guaranteed provider-side monetary caps.
+
+### Requirement: Durable correlated execution evidence
+The coordinator MUST record ordered events with task, requirement/acceptance references, attempt, role and invocation identity. CLI tool events MUST link to redacted raw evidence. Before/after file hashes and coordinator commit events MUST connect observed changes to their invocation and result.
+
+#### Scenario: Requirement to result
+- **WHEN** an operator inspects a task timeline
+- **THEN** they can follow requirement and acceptance IDs to the task attempt, agent session, observed tool items, changed-file hashes, gate evidence and integration outcome in persisted order.
+
+#### Scenario: Interrupted invocation
+- **WHEN** the coordinator dies before recording completion
+- **THEN** committed events and reservations survive reopening, the invocation is shown as interrupted/unresolved, and no automatic model replay or lease stealing occurs.
+
+### Requirement: Explicit decision accountability
+Agent decisions MUST retain explicit summaries, findings and evidence alongside their assignment and session identity. Explanations MUST NOT claim hidden reasoning or infer successful side effects from tool-start events alone.
+
+#### Scenario: Inspect a review decision
+- **WHEN** an operator asks why a reviewer rejected a candidate
+- **THEN** the history identifies that review session, assignment, candidate, explicit findings and observed evidence rather than inventing private reasoning.
+
+### Requirement: Inspectable recovery and audit backups
+SQLite on local persistent storage MUST remain the state/history store for the single-host coordinator. Integrity checks and a new-directory audit backup/restore MUST preserve committed history and evidence without overwriting active state or following symlinks/protected paths. Recovery inspection MUST block live batch startup on orphaned task leases or unresolved invocations. Audit restoration MUST NOT be represented as automatic restoration of Git worktrees, application data or model context.
+
+#### Scenario: Restore and corruption detection
+- **WHEN** an offline audit backup is restored into a fresh directory
+- **THEN** database integrity, artifact hashes and event ordering are checked, and altered/missing evidence blocks validation.
+
+### Requirement: Separate USD budgets with honest accounting basis
+The coordinator MUST support separate Codex/OpenRouter USD limits while retaining tokens. Estimates MUST use integer microdollars, conservative rounding and pinned model rates. Missing/expired prices and unreconciled unit changes MUST block. Estimates MUST NOT be labelled actual subscription charges or invoices; provider cost stays unknown without qualified observations.
+
+#### Scenario: Estimated cost admission
+- **WHEN** a USD-enabled invocation has valid configured rates
+- **THEN** its pool reserves USD capacity, records the price snapshot and token counts, and enforces observed estimated cost with the same persistent-stop behavior as token budgets.
+
+#### Scenario: Unknown cost
+- **WHEN** the selected model lacks a valid rate or earlier token-only spending exists in the ledger
+- **THEN** the coordinator blocks before a model call instead of assuming zero dollars or resetting history.

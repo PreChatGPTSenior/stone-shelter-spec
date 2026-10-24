@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import fcntl
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,9 @@ import threading
 import time
 import uuid
 
-from .core import ROOT, Blocked, command, json_read, json_write, sha, stable
+from .core import ROOT, Blocked, command, files, json_read, json_write, sha, stable
+from .history import History
+from .money import dollars, micros
 from .model_policy import cli_args
 
 
@@ -30,7 +33,7 @@ def private_stream(path):
 
 
 def redact(text, env, selection):
-    names = {'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'CODEX_ACCESS_TOKEN'}
+    names = {'OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENROUTER_API_KEY', 'CODEX_ACCESS_TOKEN'}
     names.add(selection['provider_config'].get('api_key_env', ''))
     for name in names:
         if name and env.get(name):
@@ -121,7 +124,7 @@ def terminate(process):
 
 
 def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
-           kind='agent', iteration='1', env=None, budget=None):
+           kind='agent', iteration='1', env=None, budget=None, trace_context=None):
     """Run once; preserve metrics on failure, timeout and interruption. No retry/fallback."""
     env = dict(os.environ if env is None else env)
     key_name = selection['provider_config'].get('api_key_env')
@@ -130,6 +133,18 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
     if budget is None:
         raise Blocked('Budget admission required before model invocation')
     session = uuid.uuid4().hex
+    trace_context = dict(trace_context or {})
+    trace = trace_context.get('attempt_id', session)
+    history = History(ROOT / '.execution/trace.sqlite')
+    def emit(event, payload):
+        return history.append(event, trace=trace, task=task_id, session=session, role=role, payload=payload)
+    def reference(path):
+        try: return str(Path(path).relative_to(ROOT))
+        except ValueError: return str(path)
+    def source_manifest():
+        patterns = trace_context.get('write_paths', []) if kind == 'agent' else []
+        return {str(p.relative_to(workspace)): sha(p) for p in files(workspace)
+                if any(fnmatch.fnmatchcase(str(p.relative_to(workspace)), pattern) for pattern in patterns)} if patterns else {}
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     output = folder / (role + '-' + session + '.result.json')
@@ -147,18 +162,30 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
     usage, warnings, reader_errors = Usage(), [], []
     process, status, code = None, 'START_FAILED', None
     reservation = budget.reserve(session, selection, task_id, role, kind)
+    before = source_manifest()
+    input_path = folder / (role + '-' + session + '.input.json')
+    json_write(input_path, {'context': trace_context, 'selection': selection,
+                           'prompt': redact(prompt, env, selection)})
+    emit('invocation.started', {'kind': kind, 'iteration': str(iteration), 'context': trace_context,
+                               'selection': selection, 'reservation': reservation,
+                               'input_artifact': reference(input_path), 'input_sha256': sha(input_path)})
     try:
         with private_stream(log) as stdout, private_stream(errors) as stderr:
             process = subprocess.Popen(argv, cwd=workspace, env=env, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True, start_new_session=True)
+            emit('invocation.process_started', {'pid': getattr(process, 'pid', None),
+                                                'identity': 'PID observation only; do not kill a reused PID'})
 
             def drain(source, destination, events=False):
                 try:
+                    line_number = 0
                     for line in source:
+                        line_number += 1
                         line = redact(line, env, selection)
                         destination.write(line)
                         destination.flush()
+                        os.fsync(destination.fileno())
                         if not events and re.search(r'unknown model|fallback metadata|unrecognized model', line, re.I):
                             warnings.append('Unqualified model metadata')
                         if events:
@@ -166,6 +193,13 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
                                 event = json.loads(line)
                                 if not isinstance(event, dict):
                                     raise ValueError('Expected event object')
+                                item = event.get('item') if isinstance(event.get('item'), dict) else {}
+                                # Index observed actions, not hidden reasoning. Full redacted events remain in JSONL.
+                                action = {key: item[key] for key in ('id', 'type', 'command', 'status', 'exit_code',
+                                          'changes', 'server', 'tool', 'arguments') if key in item}
+                                emit('cli.event', {'type': event.get('type'), 'thread_id': event.get('thread_id'),
+                                     'action': action, 'raw_artifact': reference(log), 'line': line_number,
+                                     'raw_event_sha256': stable(event)})
                                 usage.event(event, time.monotonic())
                                 if event.get('type') in ('turn.completed', 'turn.failed'):
                                     budget.observe(session, usage.summary(True))
@@ -220,16 +254,37 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
             reader_errors.append('Final result could not be safely recorded')
         metrics = usage.summary(status == 'COMPLETED' and not reader_errors)
         accounting = budget.observe(session, metrics, final=True, not_started=process is None)
+        metrics['estimated_cost_usd'] = accounting['estimated_cost_usd']
+        metrics['cost_basis'] = 'configured_estimate' if accounting['unit'] == 'usd' else 'unavailable'
+        after = source_manifest()
+        changes = [{'path': path, 'before_sha256': before.get(path), 'after_sha256': after.get(path)}
+                   for path in sorted(set(before) | set(after)) if before.get(path) != after.get(path)]
+        changes_path = folder / (role + '-' + session + '.changes.json')
+        json_write(changes_path, {'session': session, 'task': task_id, 'role': role,
+                                 'scope': 'Observed before/after hashes inside assigned write paths', 'changes': changes})
         record = {'schema': 1, 'session': session, 'kind': kind, 'task': task_id,
                   'role': role, 'iteration': str(iteration), 'selection': selection,
+                  'trace': trace, 'context': trace_context, 'input_artifact': reference(input_path),
+                  'changes_artifact': reference(changes_path), 'changes_sha256': sha(changes_path),
                   'started_at': started_at, 'ended_at': utc(),
                   'elapsed_seconds': round(time.monotonic() - started, 6),
                   'status': status, 'exit_code': code, 'usage': metrics,
                   'budget': {**reservation, **accounting},
                   'warnings': warnings + reader_errors, 'event_log': str(log),
                   'stderr_log': str(errors), 'raw_result': str(output)}
+        record['artifact_hashes'] = {reference(path): sha(path)
+                                    for path in (input_path, changes_path, log, errors, output) if path.is_file()}
         json_write(receipt, record)
         append_ledger(ROOT / '.execution/usage.jsonl', record)
+        decision = None
+        try:
+            value = json_read(output)
+            if isinstance(value, dict): decision = {k: value.get(k) for k in ('status', 'summary', 'findings', 'evidence')}
+        except (OSError, ValueError): pass
+        emit('invocation.finished', {'status': status, 'receipt': reference(receipt), 'sha256': sha(receipt),
+                                    'changes': changes, 'agent_decision': decision,
+                                    'decision_basis': 'Explicit emitted result, not hidden model reasoning',
+                                    'usage': metrics, 'budget': accounting})
     budget.check_stop()
     if status != 'COMPLETED' or reader_errors or warnings:
         raise Blocked('Agent invocation blocked; inspect execution receipt: ' + str(receipt))
@@ -362,12 +417,18 @@ def usage_totals(path):
                    record['selection']['provider'], record['selection']['model'], record['selection']['reasoning_effort'])
             group = groups.setdefault(key, dict(zip(('kind', 'task', 'role', 'iteration', 'provider', 'model', 'reasoning_effort'), key),
                                                calls=0, elapsed_seconds=0, known_input_tokens=0,
-                                               known_output_tokens=0, incomplete_calls=0))
+                                               known_output_tokens=0, incomplete_calls=0, known_estimated_microusd=0, unknown_cost_calls=0))
             group['calls'] += 1
             group['elapsed_seconds'] += record['elapsed_seconds']
             for field in ('known_input_tokens', 'known_output_tokens'):
                 group[field] += record['usage'][field]
             group['incomplete_calls'] += record['usage']['status'] != 'COMPLETE'
+            cost = record['usage'].get('estimated_cost_usd')
+            if cost is None: group['unknown_cost_calls'] += 1
+            else: group['known_estimated_microusd'] += micros(cost)
+    for group in groups.values():
+        group['known_estimated_cost_usd'] = dollars(group.pop('known_estimated_microusd'))
+        group['provider_reported_cost_usd'] = None
     return {'status': 'OBSERVED', 'groups': list(groups.values()),
             'time_semantics': 'Sum of agent durations; parallel durations are not wall-clock batch time',
             'billing': 'Token counters, not provider invoices; preflight costs are included separately'}

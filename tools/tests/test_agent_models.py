@@ -175,6 +175,7 @@ class AgentModelTest(unittest.TestCase):
     def test_secret_redaction(self):
         selection = resolve(self.policy, 'mixed-openrouter', 'T0002-002', 'developer')
         self.assertEqual('[REDACTED]', redact('test-secret', {'OPENROUTER_API_KEY': 'test-secret'}, selection))
+        self.assertEqual('[REDACTED]', redact('test-secret', {'CODEX_API_KEY': 'test-secret'}, self.selection))
 
     def test_failed_catalog_never_starts_probe_or_implementation(self):
         import execution.agent_runtime as runtime

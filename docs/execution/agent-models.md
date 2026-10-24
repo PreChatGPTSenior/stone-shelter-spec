@@ -97,20 +97,23 @@ Aggregation separates task, role, iteration, provider, model, effort and probe/a
 
 ## Separate Codex and OpenRouter budgets
 
-`execution/agent-budgets.json` is the coordinator budget policy. Both `limit_tokens` values are **zero by default**, so no live model probe or application agent can start until an owner explicitly sets limits. The inactive `templates/models/agent-budgets.example.json` illustrates 1,000,000 Codex tokens and 500,000 OpenRouter tokens with a 100,000-token allowance per invocation; these are example numbers, not spending authorization. Keep the pool you will not use at zero.
+`execution/agent-budgets.json` is the coordinator budget policy. Schema 2 uses separate **USD** limits, both **0.00 by default**, and an empty price table, so no live probe or application agent can start. `templates/models/agent-budgets.example.json` illustrates $20 Codex / $10 OpenRouter with a $1 invocation reservation; these are inactive example limits, not spending authorization. Positive limits also require valid per-model price snapshots. Keep an unused pool at zero.
 
-The unit is input plus output tokens, including cached input and reasoning output exactly once. These are local project budgets, not USD, ChatGPT subscription credits, remaining account quota or provider invoices. GPT called through OpenRouter charges the OpenRouter pool; builtin OpenAI/Codex calls charge the Codex pool. An arbitrary custom gateway requires explicit accounting support and currently blocks instead of silently sharing a pool.
+USD values are configured **estimates**, not invoices or ChatGPT subscription credits; token counts remain observed input plus output, without double-counting cached/reasoning subsets. GPT through OpenRouter charges the OpenRouter pool; builtin OpenAI/Codex calls charge Codex. The older schema 1 token budget remains supported, but existing spending cannot change accounting units without reviewed migration. Arbitrary gateways still require explicit pool support.
 
 For each pool:
 
 | Setting / counter | Meaning |
 |---|---|
-| `limit_tokens` | Project-lifetime allowance, cumulative across tickets, retries, presets and restarts |
-| `invocation_allowance_tokens` | Capacity reserved atomically before each probe or role process; also its observed-usage stopping threshold |
+| `limit_usd` | Decimal-string project-lifetime USD estimate allowance, cumulative across tickets, retries, presets and restarts |
+| `invocation_allowance_usd` | Capacity reserved atomically before each probe or role process; also its observed-estimate stopping threshold |
 | `observed_tokens` | Tokens actually reported so far; overruns remain visible |
-| `charged_tokens` | Settled usage plus the larger of reserved/observed tokens for open or uncertain calls |
-| `available_tokens` | Limit minus charged tokens, floored at zero |
+| `observed_estimated_usd` | Estimated cost from observed tokens and the pinned price snapshot |
+| `charged_estimated_usd` | Settled estimates plus the larger of reserved/observed estimates for open or uncertain calls |
+| `available_usd` | Limit minus charged estimate, floored at zero |
 | `unsettled_calls` | Reserved, running or unknown calls that still hold capacity |
+
+`prices` keys are `<pool>:<exact-model>`, for example `codex:gpt-6.1-sol` or `openrouter:qwen/qwen3-coder-next`. Each value must contain `input_usd_per_million`, `cached_input_usd_per_million`, `output_usd_per_million` as decimal strings, `basis: "configured_estimate"`, an HTTPS `source` and timezone-aware `valid_until`. No rates are fetched automatically or invented. An absent/expired price blocks admission. Each reservation freezes its rates so historical estimates cannot change after a price edit. Monetary storage is integer microdollars, rounded upward; missing cache counters receive no unobserved discount.
 
 Checks occur before the initial batch, each feature/frontier, each invocation including preflight/repair/integration review, during model execution and before tests, browser checks, gates and integration. SQLite `BEGIN IMMEDIATE` reservations prevent parallel callers from spending the same available capacity. A smaller remainder than one invocation allowance blocks a new call even if the pool is not fully consumed; the coordinator never borrows from the other pool.
 
@@ -128,9 +131,11 @@ python3 tools/orchestrate.py usage
 
 Every execution receipt and agent handoff includes the pool, reservation, observed tokens, settlement state, policy hash and stop reason alongside per-iteration model/effort/time. `.execution/` stays Git-ignored. All launchers for this project must use the coordinator; standalone CLI/API use is outside its accounting scope.
 
+Receipts/usage rollups now include `estimated_cost_usd` separately from unavailable actual provider cost. See [workflow assurance, recovery and pricing basis](workflow-assurance.md) for the storage map, observed tool-call timeline, backup commands and the distinction between API estimates and Codex subscription usage.
+
 ## Offline verification and live qualification
 
-`npm run check:models` runs `tools/tests/test_agent_models.py` and `test_agent_budgets.py` with fake inference processes and network-denying patches. Coverage includes selection precedence, unknown capabilities, stale admissions, usage subsets, secret handling, concurrent reservations, crash recovery blocking, cross-pool cancellation and prevention of merge/DONE. `npm run check` also verifies the existing coordinator; `npm run check:specs` validates OpenSpec. Exact observations are recorded in [verification results](../verification.md). Live compatibility, actual catalog schemas, image support, effort support and account access remain unverified until T0009-007 is explicitly authorized.
+`npm run check:models` runs `test_agent_*.py`: model, token/USD budget, durable history/recovery and complete offline workflow fixtures. Model processes are fake; crash tests use small local Python children, and workflow fixtures use disposable Git repositories. Coverage includes unknown capabilities, stale admissions, attribution, concurrent reservations, real process-death persistence, corruption/backup checks and prevention of merge/DONE. `npm run check` also verifies the existing coordinator; `npm run check:specs` validates OpenSpec. Exact results are in [verification](../verification.md). Live catalog/protocol, effort/image support, account access and actual provider billing remain unverified until T0009-007 is authorized.
 
 Official references consulted on 2026-10-24:
 
