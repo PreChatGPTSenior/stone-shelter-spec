@@ -287,17 +287,17 @@ def main():
    if args.action=='models':print(json.dumps({'status':'CONFIGURATION_ONLY','compatibility':'NOT_CHECKED','bindings':bindings},indent=2));return 0
    if not args.execute:raise Blocked('Live model preflight makes billable model calls; explicit --execute is required')
    target=ROOT/'.execution/model-preflight'/uuid.uuid4().hex
-   json_write(target/'batch.json',{'status':'CHECKING','bindings':bindings})
-   try:
-    (ROOT/'.execution').mkdir(exist_ok=True)
-    with (ROOT/'.execution/coordinator.lock').open('a') as lock:
-     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-     require_recovered(ROOT/'.execution')
+   (ROOT/'.execution').mkdir(exist_ok=True)
+   with (ROOT/'.execution/coordinator.lock').open('a') as lock:
+    fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    require_recovered(ROOT/'.execution')
+    json_write(target/'batch.json',{'status':'CHECKING','bindings':bindings})
+    try:
      budget=Budgets(ROOT/'.execution/budgets.sqlite',load_budgets(),BUDGET_POLICY_PATH)
      receipts=live_preflight(bindings,policy,target,dict(os.environ),budget=budget) if bindings else {}
-   except BaseException:
-    json_write(target/'batch.json',{'status':'BLOCKED','bindings':bindings});raise
-   json_write(target/'batch.json',{'status':'PASS','bindings':bindings,'receipts':receipts})
+    except BaseException:
+     json_write(target/'batch.json',{'status':'BLOCKED','bindings':bindings});raise
+    json_write(target/'batch.json',{'status':'PASS','bindings':bindings,'receipts':receipts})
    print(json.dumps({'status':'PASS','report':str(target/'batch.json'),'implementation_agents_started':False}));return 0
   if args.action=='usage':print(json.dumps(usage_totals(ROOT/'.execution/usage.jsonl'),indent=2));return 0
   if args.action=='budgets':print(json.dumps(budget_snapshot(ROOT/'.execution/budgets.sqlite',load_budgets()),indent=2));return 0
@@ -307,12 +307,16 @@ def main():
    file=ROOT/'.execution/state.sqlite';print(json.dumps(State(file).status() if file.exists() else {'status':'NOT_STARTED'},indent=2));return 0
   if not args.execute:raise Blocked('Execution requires --execute and explicitly selected --tasks')
   if args.action=='retry':
-   state=State(ROOT/'.execution/state.sqlite')
-   for t in selected:
-    s=state.status().get(t['id'])
-    if s and s['status']=='BLOCKED':
-     state.set(t['id'],'RETRY',s['owner'],detail='Explicit retry requested; previous branch retained')
-     History(ROOT/'.execution/trace.sqlite').append('task.retry_enabled',trace=s['owner'],task=t['id'],payload={'reason':'Explicit retry requested; previous branch retained'})
+   (ROOT/'.execution').mkdir(exist_ok=True)
+   with (ROOT/'.execution/coordinator.lock').open('a') as lock:
+    fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    require_recovered(ROOT/'.execution')
+    state=State(ROOT/'.execution/state.sqlite')
+    for t in selected:
+     s=state.status().get(t['id'])
+     if s and s['status']=='BLOCKED':
+      state.set(t['id'],'RETRY',s['owner'],detail='Explicit retry requested; previous branch retained')
+      History(ROOT/'.execution/trace.sqlite').append('task.retry_enabled',trace=s['owner'],task=t['id'],payload={'reason':'Explicit retry requested; previous branch retained'})
    print(json.dumps({'status':'RETRY_ENABLED','next':'Run the selected task again; previous worktrees and evidence are preserved'}));return 0
   if not 1<=args.workers<=3:raise Blocked('Workers must be 1..3')
   (ROOT/'.execution').mkdir(exist_ok=True)
