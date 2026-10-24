@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sqlite3
 import subprocess
+import tempfile
 import time
 
 ROOT=Path(__file__).absolute().parents[2]
@@ -42,10 +43,15 @@ def identity(root):return stable({str(p.relative_to(root)):sha(p) for p in sorte
 def json_read(path):return json.loads(Path(path).read_text())
 def json_write(path,value):
  p=Path(path);p.parent.mkdir(parents=True,exist_ok=True)
- tmp=p.with_name(p.name+'.tmp')
- fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
- with os.fdopen(fd,'w') as f:json.dump(value,f,indent=2);f.write('\n')
- os.replace(tmp,p)
+ fd,tmp=tempfile.mkstemp(prefix=p.name+'.',suffix='.tmp',dir=p.parent)
+ try:
+  with os.fdopen(fd,'w') as f:json.dump(value,f,indent=2);f.write('\n');f.flush();os.fsync(f.fileno())
+  os.replace(tmp,p)
+  directory=os.open(p.parent,os.O_RDONLY)
+  try:os.fsync(directory)
+  finally:os.close(directory)
+ finally:
+  if os.path.exists(tmp):os.unlink(tmp)
 
 def command(argv,cwd=ROOT,env=None,timeout=180,capture=True):
  try:
@@ -77,9 +83,12 @@ class State:
    db.execute('CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY,status TEXT NOT NULL,owner TEXT,commit_id TEXT,detail TEXT,updated REAL NOT NULL)')
    db.execute('CREATE TABLE IF NOT EXISTS leases(resource TEXT PRIMARY KEY,owner TEXT NOT NULL,expires REAL NOT NULL)')
    db.execute('CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY,task TEXT,status TEXT,detail TEXT,at REAL)')
+   columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
+   for column in ('owner','commit_id'):
+    if column not in columns:db.execute('ALTER TABLE events ADD COLUMN '+column+' TEXT')
  @contextlib.contextmanager
  def db(self):
-  db=sqlite3.connect(self.path,timeout=30);db.execute('PRAGMA busy_timeout=30000')
+  db=sqlite3.connect(self.path,timeout=30);db.execute('PRAGMA busy_timeout=30000');db.execute('PRAGMA synchronous=FULL')
   try:
    db.execute('BEGIN IMMEDIATE');yield db;db.commit()
   except BaseException:db.rollback();raise
@@ -98,14 +107,18 @@ class State:
     if db.execute('SELECT 1 FROM leases WHERE resource=?',(resource,)).fetchone():raise Blocked('Resource busy: '+resource)
    for resource in task['exclusive_resources']:db.execute('INSERT INTO leases VALUES(?,?,?)',(resource,owner,time.time()+ttl))
    db.execute('INSERT OR REPLACE INTO tasks VALUES(?,?,?,?,?,?)',(task['id'],'CLAIMED',owner,None,'',time.time()))
+   db.execute('INSERT INTO events(task,status,detail,at,owner) VALUES(?,?,?,?,?)',(task['id'],'CLAIMED','Exclusive resources acquired',time.time(),owner))
  def set(self,tid,status,owner,commit_id=None,detail=''):
   with self.db() as db:
    row=db.execute('SELECT owner FROM tasks WHERE id=?',(tid,)).fetchone()
    if row and row[0] not in (owner,None):raise Blocked('Wrong lease owner')
    db.execute('INSERT OR REPLACE INTO tasks VALUES(?,?,?,?,?,?)',(tid,status,owner,commit_id,detail,time.time()))
-   db.execute('INSERT INTO events(task,status,detail,at) VALUES(?,?,?,?)',(tid,status,detail,time.time()))
+   db.execute('INSERT INTO events(task,status,detail,at,owner,commit_id) VALUES(?,?,?,?,?,?)',(tid,status,detail,time.time(),owner,commit_id))
  def release(self,owner):
-  with self.db() as db:db.execute('DELETE FROM leases WHERE owner=?',(owner,))
+  with self.db() as db:
+   resources=[r[0] for r in db.execute('SELECT resource FROM leases WHERE owner=?',(owner,))]
+   db.execute('DELETE FROM leases WHERE owner=?',(owner,))
+   db.execute('INSERT INTO events(status,detail,at,owner) VALUES(?,?,?,?)',('LEASES_RELEASED',json.dumps(resources),time.time(),owner))
 
 def decide_gate(task,candidate,reports):
  required=['environment','static','code_review','tests','test_engineer','test_review','browser_planner','browser','browser_review']

@@ -3,6 +3,8 @@
 import json,re,sys
 from pathlib import Path
 from execution.core import ROOT,Blocked,safe,tasks
+from execution.model_policy import load as load_models
+from execution.budgets import load as load_budgets
 
 def validate(all_tasks=None):
  ts=all_tasks if all_tasks is not None else tasks();by={t['id']:t for t in ts}
@@ -36,6 +38,8 @@ def validate(all_tasks=None):
  if scenarios!=acceptance:raise Blocked('Unowned acceptance scenarios')
  for stage in ['developer','code_review','test_engineer','test_review','browser_planner','browser_review']:
   if not (ROOT/'execution/prompts'/f'{stage}.md').is_file():raise Blocked('Missing role prompt')
+ load_models(by)
+ load_budgets()
  return {'status':'PASS','tasks':len(ts),'changes':len({t['change'] for t in ts}),'requirements':len(requirements),'acceptance_scenarios':len(acceptance),'meaning':'Execution package structure verified; application implementation and acceptance NOT_RUN'}
 if __name__=='__main__':
  try:print(json.dumps(validate(),indent=2))
