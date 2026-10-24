@@ -1,0 +1,18 @@
+.env
+.env.*
+!.env.example
+
+# Maven build output
+**/target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Local operating system files and logs
+.DS_Store
+*.log
+
+# Frontend dependencies and build output
+/stone-shelter-ui/node_modules/
+/stone-shelter-ui/dist/

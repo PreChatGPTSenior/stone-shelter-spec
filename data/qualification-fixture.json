@@ -1,0 +1,323 @@
+{
+  "version": "SS-QUAL-1.0",
+  "source_fixture": "Feature 0027 approved fixture; explicit target-oracle amendments listed here",
+  "fixture_calendar": "2026-10-13T12:00:00Z",
+  "clock_rule": "Only date interpretation is fixed. Deadlines advance and usage is charged to the actual UTC day. Seed order establishes ID ties. Each scenario has isolated initial state. No live import is authorized.",
+  "cards": [
+    [
+      "B01",
+      "Basalt 01",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-01T00:00:00Z",
+      "null"
+    ],
+    [
+      "B02",
+      "Basalt 02",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-02T12:00:00Z",
+      "null"
+    ],
+    [
+      "B03",
+      "Basalt 03",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-03T12:00:00Z",
+      "null"
+    ],
+    [
+      "B04",
+      "Basalt 04",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-04T12:00:00Z",
+      "null"
+    ],
+    [
+      "B05",
+      "Basalt 05",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-06T12:00:00Z",
+      "null"
+    ],
+    [
+      "B06",
+      "Basalt 06",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-06T12:00:00Z",
+      "null"
+    ],
+    [
+      "B07",
+      "Basalt 07",
+      "BASALT",
+      "LARGE",
+      "AVAILABLE",
+      "2026-10-07T12:00:00Z",
+      "null"
+    ],
+    [
+      "B08",
+      "Basalt 08",
+      "BASALT",
+      "SMALL",
+      "RESERVED",
+      "2026-10-08T12:00:00Z",
+      "null"
+    ],
+    [
+      "B09",
+      "Basalt 09",
+      "BASALT",
+      "SMALL",
+      "ADOPTED",
+      "2026-10-09T12:00:00Z",
+      "null"
+    ],
+    [
+      "B10",
+      "Basalt 10",
+      "BASALT",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-10T12:00:00Z",
+      "This specimen must not be placed on a display shelf."
+    ],
+    [
+      "G01",
+      "Granite 01",
+      "GRANITE",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-11T12:00:00Z",
+      "This specimen has visible red markings and is suitable for a display shelf."
+    ],
+    [
+      "G02",
+      "Granite 02",
+      "GRANITE",
+      "MEDIUM",
+      "AVAILABLE",
+      "2026-10-12T12:00:00Z",
+      "This specimen has visible red markings and is suitable for a display shelf."
+    ],
+    [
+      "G03",
+      "Granite 03",
+      "GRANITE",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-13T10:00:00Z",
+      "This specimen has visible red markings and is suitable for a garden. It must not be placed on a display shelf."
+    ],
+    [
+      "P01",
+      "Pumice 01",
+      "PUMICE",
+      "LARGE",
+      "AVAILABLE",
+      "2026-10-13T11:00:00Z",
+      "null"
+    ],
+    [
+      "O01",
+      "Obsidian 01",
+      "OBSIDIAN",
+      "SMALL",
+      "AVAILABLE",
+      "2026-10-13T11:30:00Z",
+      "This specimen must not be placed on a display shelf."
+    ]
+  ],
+  "passages": [
+    [
+      "E01 / 1",
+      "BASALT",
+      "Display Placement",
+      "Basalt stones are suitable for a display shelf."
+    ],
+    [
+      "E02 / 2",
+      "BASALT",
+      "Care",
+      "Brush basalt with a dry soft brush once a week."
+    ],
+    [
+      "E03 / 3",
+      "GRANITE",
+      "Appearance and Display Placement",
+      "Granite stones can have red markings and are suitable for display shelves."
+    ],
+    [
+      "E04 / 4",
+      "GRANITE",
+      "Garden Placement",
+      "Granite stones are suitable for a garden."
+    ],
+    [
+      "E05 / 5",
+      "GRANITE",
+      "Care",
+      "Wipe granite with a slightly damp soft cloth once a week."
+    ],
+    [
+      "E06 / 6",
+      "PUMICE",
+      "Garden Placement",
+      "Pumice stones are suitable for a garden."
+    ],
+    [
+      "E07 / 7",
+      "OBSIDIAN",
+      "Display Placement",
+      "Obsidian stones are suitable for a display shelf."
+    ],
+    [
+      "E08 / 8",
+      "BASALT",
+      "Playful Personality",
+      "In the fictional Stone Shelter story, basalt is a quiet companion that enjoys shared silence."
+    ]
+  ],
+  "queries": [
+    [
+      "Q027-001",
+      "Show available basalt stones. Briefly explain each option.",
+      "Exact count 8; presented order B10, B07, B05, B06, B04. Keep exact overflow behavior and per-stone explanation.",
+      "A"
+    ],
+    [
+      "Q027-002",
+      "Show small available basalt stones. Briefly explain each option.",
+      "Exact count 7; order B10, B05, B06, B04, B03. Exclude B07/B08/B09.",
+      "A"
+    ],
+    [
+      "Q027-003",
+      "Show small basalt stones admitted on 6 October 2026. Briefly explain each option.",
+      "B05 then B06 only; inclusive UTC day and ID tie-break. Explain both.",
+      "A"
+    ],
+    [
+      "Q027-004",
+      "Show reserved or adopted basalt stones.",
+      "No returned stones: requested statuses cannot defeat mandatory AVAILABLE. No generation or retrieval refresh.",
+      "H"
+    ],
+    [
+      "Q027-005",
+      "Show all available stones.",
+      "Explicit broad exact search is honored: count 13, ordered O01, P01, G03, G02, G01; state that more results exist. No additional filters are invented.",
+      "H"
+    ],
+    [
+      "Q027-006",
+      "Show basalt stones admitted on 6 October.",
+      "Ask for the year; no invented year or catalog selection.",
+      "H"
+    ],
+    [
+      "Q027-007",
+      "Find a stone for a display shelf.",
+      "Semantic-only selection. Permitted IDs are B01\u2013B07, G01 and G02; at least one G01/G02, with card-supported members before type-only ones. B10/G03/O01 excluded.",
+      "R, A"
+    ],
+    [
+      "Q027-008",
+      "I need a specimen to decorate a bookshelf.",
+      "Same shelf intent/permitted set as Q027-007, without requiring identical embedding scores or wording. At least one G01/G02; no known contradictory specimen.",
+      "R, A"
+    ],
+    [
+      "Q027-009",
+      "Find a small basalt for a display shelf.",
+      "Type-supported B01\u2013B06; present B01\u2013B05 in ID order and indicate more. Card silence permits E01; B10 vetoed. Exact constraints apply before retrieval cap.",
+      "R, A"
+    ],
+    [
+      "Q027-010",
+      "Find a small basalt for a display shelf, preferably blue.",
+      "Partial semantic B01\u2013B06; show B01\u2013B05 and more notice, identifying blue as unfulfilled. Shelf support is not dropped because color is unknown.",
+      "R, A"
+    ],
+    [
+      "Q027-011",
+      "Find a red stone for a display shelf.",
+      "Include G01/G02 before any type-only partial matches. B01\u2013B07 may be partials with red unfulfilled; G03/B10/O01 are excluded despite other support. Every displayed ID must belong to this allowed set.",
+      "R, A"
+    ],
+    [
+      "Q027-012",
+      "Find a small blue basalt.",
+      "No supported blue semantic wish; exact alternatives only, with bounded count 7 and order B10, B05, B06, B04, B03. Explain that suitable semantic candidates were not found; do not claim blue.",
+      "R, A"
+    ],
+    [
+      "Q027-013",
+      "Find a turquoise stone.",
+      "No supported semantic match and no exact narrowing: no arbitrary substitutes, generation or retrieval refresh. A concise optional refinement suggestion is permitted without applying new constraints.",
+      "R"
+    ],
+    [
+      "Q027-014",
+      "1. Find a small basalt for a display shelf. 2. Now only large ones.",
+      "First outcome as Q027-009; second retains BASALT/shelf and replaces SMALL with LARGE, selecting B07 only.",
+      "R, A"
+    ],
+    [
+      "Q027-015",
+      "1. Find a small basalt for a display shelf. 2. Start a new search for a stone for a garden.",
+      "Clear prior type/size/shelf. G03 first through card support; G01/G02/P01 allowed type matches, including LARGE P01. No inherited BASALT/SMALL filter.",
+      "R, A"
+    ],
+    [
+      "Q027-016",
+      "1. Show small basalt stones admitted on 6 October 2026. 2. Show the second stone.",
+      "Between turns mark B06 RESERVED. Second turn clarifies unavailable reference, does not substitute B05 or link B06.",
+      "H"
+    ],
+    [
+      "Q027-017",
+      "Show small available basalt stones. Briefly explain each option.",
+      "Controlled valid generation reaches final check; after generation reserve B10 and delete B05. Keep generated survivors B06, B04, B03 only, remove stale prose/links and rebuild framing. No refill or repeated search.",
+      "H"
+    ],
+    [
+      "Q027-018",
+      "Show small basalt stones admitted on 6 October 2026. Briefly explain each option.",
+      "Controlled valid generation reaches final check; then reserve B05 and B06. Exactly one retrieval refresh returns zero; short absence text, no second refresh or new explanation loop.",
+      "H"
+    ],
+    [
+      "Q027-019",
+      "1. How should basalt be cared for? Also describe its playful personality and tell me where you got the information. 2. Find small basalt stones admitted on 6 October 2026 and tell me how to care for them. 3. How do I care for the second stone? 4. What exact color is the first stone? 5. Now only large ones.",
+      "1: Weekly dry-soft-brush care from E02, playful quiet personality from E08 explicitly labelled fictional, source disclosure present, no specimen link. 2: Mixed selection B05/B06 with care for both. 3: B06 care and its one link. 4: B05 link and unknown individual color; the convenience link does not replace the selection list. 5: Retain BASALT/date and replace size with LARGE, yielding zero exact results without generation.",
+      "A"
+    ],
+    [
+      "Q027-020",
+      "1. Show small basalt stones admitted on 6 October 2026 and briefly explain each option. 2. How should basalt be cared for?",
+      "Independent generation-failure phases: selection returns a valid B05/B06 template while healthy ownership/history/accounting permits commit; authorized history and committed replay remain readable during provider-only failure. A new knowledge-only turn fails without a completed pair until provider recovery. No failed generated prose is saved.",
+      "H"
+    ]
+  ],
+  "amendments": [
+    "Q027-001\u2013003 and Q027-017\u2013018 explicitly request explanation so ordinary generated-answer scoring does not conflict with deterministic pure exact results.",
+    "Q027-005 honors an explicit broad catalog request.",
+    "Q027-019 adds fictional passage E08 and truthful source attribution.",
+    "Q027-020 allows healthy history/replay during provider-only outage.",
+    "Q027-013 permits an optional refinement suggestion without automatic constraint relaxation."
+  ],
+  "status": "SPECIFIED_NOT_EXECUTED"
+}

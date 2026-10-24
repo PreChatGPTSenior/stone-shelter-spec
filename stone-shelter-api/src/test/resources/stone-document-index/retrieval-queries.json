@@ -1,0 +1,204 @@
+[
+  {
+    "id": "Q01",
+    "query": "How do I clean basalt every month?",
+    "relevantGroups": [
+      [
+        "Basalt > Monthly Care"
+      ]
+    ]
+  },
+  {
+    "id": "Q02",
+    "query": "A quiet companion that enjoys shared silence",
+    "relevantGroups": [
+      [
+        "Basalt > Fictional Care Ritual",
+        "Basalt > Psychological Vibe"
+      ]
+    ]
+  },
+  {
+    "id": "Q03",
+    "query": "Which stone likes keeping everything organized?",
+    "relevantGroups": [
+      [
+        "Granite > Psychological Vibe",
+        "Granite > Fictional Care Ritual",
+        "Granite > Attributes",
+        "Slate > Psychological Vibe",
+        "Slate > Fictional Care Ritual",
+        "Slate > Attributes",
+        "Quick Comparison > Granite",
+        "Quick Comparison > Slate"
+      ]
+    ]
+  },
+  {
+    "id": "Q04",
+    "query": "How can I give obsidian its monthly evening ritual?",
+    "relevantGroups": [
+      [
+        "Obsidian > Fictional Care Ritual"
+      ]
+    ]
+  },
+  {
+    "id": "Q05",
+    "query": "What happens if obsidian falls onto tiles?",
+    "relevantGroups": [
+      [
+        "Obsidian > Fragility and Drop Behavior",
+        "Obsidian > Physical Properties"
+      ]
+    ]
+  },
+  {
+    "id": "Q06",
+    "query": "Can basalt stay on a bathroom shelf?",
+    "relevantGroups": [
+      [
+        "Basalt > Ideal Places at Home",
+        "Quick Comparison > Basalt",
+        "Basalt > Sunlight and Moisture Resistance"
+      ]
+    ]
+  },
+  {
+    "id": "Q07",
+    "query": "Does a higher care rating mean daily chores?",
+    "relevantGroups": [
+      [
+        "Rating Scales > Care Demand Scale"
+      ]
+    ]
+  },
+  {
+    "id": "Q08",
+    "query": "Can I use acidic cleaner on marble or limestone?",
+    "relevantGroups": [
+      [
+        "General Care Rules > Cleaning Principles"
+      ]
+    ]
+  },
+  {
+    "id": "Q09",
+    "query": "Compare basalt and obsidian fragility",
+    "relevantGroups": [
+      [
+        "Basalt > Attributes",
+        "Quick Comparison > Basalt"
+      ],
+      [
+        "Obsidian > Attributes",
+        "Quick Comparison > Obsidian"
+      ]
+    ]
+  },
+  {
+    "id": "Q10",
+    "query": "Why does pumice feel so light compared with a dense stone of the same size?",
+    "relevantGroups": [
+      [
+        "Pumice > Physical Properties"
+      ]
+    ]
+  },
+  {
+    "id": "Q11",
+    "query": "How should pumice dry after rinsing?",
+    "relevantGroups": [
+      [
+        "Pumice > Sunlight and Moisture Resistance"
+      ]
+    ]
+  },
+  {
+    "id": "Q12",
+    "query": "Should I apply oil or varnish to limestone to intensify its color?",
+    "relevantGroups": [
+      [
+        "Limestone > Monthly Care"
+      ]
+    ]
+  },
+  {
+    "id": "Q13",
+    "query": "Where can I keep friable sandstone away from splashes?",
+    "relevantGroups": [
+      [
+        "Sandstone > Ideal Places at Home"
+      ]
+    ]
+  },
+  {
+    "id": "Q14",
+    "query": "What can repeated wetting and drying do to shale?",
+    "relevantGroups": [
+      [
+        "Shale > Sunlight and Moisture Resistance"
+      ]
+    ]
+  },
+  {
+    "id": "Q15",
+    "query": "Does a small marble specimen need monthly polishing or regular sealing?",
+    "relevantGroups": [
+      [
+        "Marble > Monthly Care"
+      ]
+    ]
+  },
+  {
+    "id": "Q16",
+    "query": "Why does gneiss have alternating light and dark bands?",
+    "relevantGroups": [
+      [
+        "Gneiss > Geological Profile",
+        "Gneiss > Physical Properties"
+      ]
+    ]
+  },
+  {
+    "id": "Q17",
+    "query": "What can happen if a thin slate plate lands on its edge?",
+    "relevantGroups": [
+      [
+        "Slate > Fragility and Drop Behavior"
+      ]
+    ]
+  },
+  {
+    "id": "Q18",
+    "query": "Do my stones need daily watering or sunbathing?",
+    "relevantGroups": [
+      [
+        "General Care Rules > Everyday Essentials"
+      ]
+    ]
+  },
+  {
+    "id": "Q19",
+    "query": "Is fragility the same as resistance to scratching?",
+    "relevantGroups": [
+      [
+        "Rating Scales > Fragility Scale"
+      ]
+    ]
+  },
+  {
+    "id": "Q20",
+    "query": "Compare pumice and shale care demand",
+    "relevantGroups": [
+      [
+        "Pumice > Attributes",
+        "Quick Comparison > Pumice"
+      ],
+      [
+        "Shale > Attributes",
+        "Quick Comparison > Shale"
+      ]
+    ]
+  }
+]

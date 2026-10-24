@@ -1,0 +1,8 @@
+* text=auto
+*.cmd text eol=crlf
+product-baseline/** -text
+reference/** -text
+*.jpeg -text
+*.png -text
+*.docx -text
+product-baseline/acceptance-matrix.csv whitespace=cr-at-eol

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
+    <changeSet id="0022-create-stone-card-index-processing" author="stone-shelter">
+        <sql><![CDATA[
+CREATE TABLE stone_card_index_state (
+    stone_id BIGINT PRIMARY KEY CHECK (stone_id > 0),
+    source_version BIGINT NOT NULL CHECK (source_version >= 0),
+    deleted BOOLEAN NOT NULL
+);
+CREATE TABLE stone_card_index_attempt (
+    source_topic TEXT NOT NULL,
+    source_partition INTEGER NOT NULL CHECK (source_partition >= 0),
+    source_offset BIGINT NOT NULL CHECK (source_offset >= 0),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 3),
+    next_attempt_at TIMESTAMP WITH TIME ZONE,
+    last_error TEXT,
+    original_record BYTEA,
+    dead_letter_pending BOOLEAN NOT NULL DEFAULT FALSE,
+    dead_lettered BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (source_topic, source_partition, source_offset),
+    CHECK (NOT (dead_letter_pending AND dead_lettered))
+);
+CREATE INDEX ix_stone_card_index_attempt_dlq ON stone_card_index_attempt (dead_letter_pending, next_attempt_at);
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
+    <changeSet id="0021-create-stone-index-source-version" author="stone-shelter">
+        <sql><![CDATA[
+CREATE TABLE stone_index_source_version (
+    stone_id BIGINT PRIMARY KEY CHECK (stone_id > 0),
+    source_version BIGINT NOT NULL CHECK (source_version >= 0)
+);
+INSERT INTO stone_index_source_version (stone_id, source_version) SELECT id, 0 FROM stone;
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>

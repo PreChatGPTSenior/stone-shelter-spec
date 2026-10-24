@@ -1,0 +1,7 @@
+engineering-log/
+**/engineering-log/
+.execution/
+.cache/
+node_modules/
+**/target/
+**/dist/

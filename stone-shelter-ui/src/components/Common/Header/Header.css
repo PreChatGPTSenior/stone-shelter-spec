@@ -1,0 +1,16 @@
+.site-header { display: flex;
+  align-items: center;
+  min-height: 76px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--color-divider); }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--color-accent); text-decoration: none; }
+.brand:hover h1 { text-decoration: underline; }
+.brand:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+.brand h1 { margin: 0; max-width: 120px; font-size: 21px; line-height: 1.1; font-weight: 600; }
+@media (max-width: 959px) {
+  .site-header { padding: 20px 24px; }
+}
+@media (max-width: 559px) {
+  .site-header { padding: 20px; }
+  .brand h1 { max-width: none; font-size: 20px; }
+}

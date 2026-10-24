@@ -1,0 +1,72 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  application:
+    name: stone-shelter-api
+  ai:
+    model:
+      embedding: none
+    ollama:
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://host.docker.internal:11434}
+      chat:
+        model: ${SPRING_AI_OLLAMA_CHAT_MODEL:qwen2.5:3b}
+      init:
+        pull-model-strategy: never
+  data:
+    redis:
+      timeout: ${CHAT_REDIS_TIMEOUT:PT1S}
+      connect-timeout: ${CHAT_REDIS_TIMEOUT:PT1S}
+      repositories:
+        enabled: false
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+management:
+  health:
+    redis:
+      enabled: ${REDIS_HEALTH_ENABLED:false}
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+springdoc:
+  packages-to-scan: lab.stoneshelter.controllers
+  paths-to-match: /api/**
+  override-with-generic-response: false
+
+stone:
+  ai:
+    chat-memory:
+      ttl: ${CHAT_MEMORY_TTL:PT24H}
+  photos:
+    enabled: ${PHOTO_STORAGE_ENABLED:false}
+    endpoint: ${MINIO_ENDPOINT:}
+    browser-endpoint: ${MINIO_BROWSER_ENDPOINT:}
+    bucket: ${MINIO_BUCKET:}
+    draft-bucket: ${MINIO_DRAFT_BUCKET:stone-photo-drafts}
+    placeholder-url: ${STONE_PHOTO_PLACEHOLDER_URL:/images/placeholder-rock.png}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    cleanup-cron: "${PHOTO_CLEANUP_CRON:0 0 3 * * *}"
+    cleanup-zone: ${PHOTO_CLEANUP_ZONE:UTC}
+    cleanup-batch-size: ${PHOTO_CLEANUP_BATCH_SIZE:100}
+    cleanup-max-objects: ${PHOTO_CLEANUP_MAX_OBJECTS:1000}
+    cleanup-interval-ms: ${PHOTO_CLEANUP_INTERVAL_MS:1000}
+    cleanup-max-duration: ${PHOTO_CLEANUP_MAX_DURATION:PT30M}
+
+server:
+  tomcat:
+    # Consume a rejected multipart body so clients can receive its 413 ProblemDetail.
+    max-swallow-size: -1

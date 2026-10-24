@@ -1,0 +1,104 @@
+asyncapi: 3.0.0
+info:
+  title: Stone Shelter card indexing
+  version: 1.0.0
+  description: Proposed immutable schema version 1; T0005-004 validates producer and consumer before implementation.
+defaultContentType: application/json
+channels:
+  stoneCardIndexEvents:
+    address: stone-card-index-events
+    messages:
+      stoneCardUpdated:
+        $ref: '#/components/messages/StoneCardUpdated'
+      stoneCardDeleted:
+        $ref: '#/components/messages/StoneCardDeleted'
+  stoneCardIndexDeadLetters:
+    address: stone-card-index-events.dlq
+    messages:
+      deadLetter:
+        $ref: '#/components/messages/IndexDeadLetter'
+operations:
+  publishDeadLetter:
+    action: send
+    channel:
+      $ref: '#/channels/stoneCardIndexDeadLetters'
+  publishCardSnapshot:
+    action: send
+    channel:
+      $ref: '#/channels/stoneCardIndexEvents'
+  consumeCardSnapshot:
+    action: receive
+    channel:
+      $ref: '#/channels/stoneCardIndexEvents'
+components:
+  messages:
+    IndexDeadLetter:
+      name: STONE_CARD_INDEX_DEAD_LETTER
+      payload:
+        type: object
+        additionalProperties: false
+        required: [deadLetterId, schemaVersion, eventId, sourceTopic, sourcePartition, sourceOffset, rawKeyBase64, rawValueBase64, failureStage, errorCode, failedAt, deliveryAttempts]
+        properties:
+          deadLetterId: {type: string, format: uuid}
+          schemaVersion: {type: integer, const: 1}
+          eventId: {type: [string, 'null'], format: uuid}
+          sourceTopic: {type: string, minLength: 1}
+          sourcePartition: {type: [integer, 'null'], minimum: 0}
+          sourceOffset: {type: [integer, 'null'], minimum: 0}
+          rawKeyBase64: {type: [string, 'null'], contentEncoding: base64}
+          rawValueBase64: {type: string, contentEncoding: base64}
+          failureStage: {type: string, enum: [VALIDATION, DISPATCH, EMBEDDING, PERSISTENCE]}
+          errorCode: {type: string, minLength: 1, maxLength: 120}
+          failedAt: {type: string, format: date-time}
+          deliveryAttempts: {type: integer, minimum: 0}
+    StoneCardUpdated:
+      name: STONE_CARD_INDEX_UPDATED
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType:
+                const: STONE_CARD_INDEX_UPDATED
+              payload:
+                $ref: '#/components/schemas/CardSnapshot'
+    StoneCardDeleted:
+      name: STONE_CARD_INDEX_DELETED
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType:
+                const: STONE_CARD_INDEX_DELETED
+              payload:
+                $ref: '#/components/schemas/Tombstone'
+  schemas:
+    Envelope:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventType, schemaVersion, occurredAt, payload]
+      properties:
+        eventId: {type: string, format: uuid}
+        eventType: {type: string, enum: [STONE_CARD_INDEX_UPDATED, STONE_CARD_INDEX_DELETED]}
+        schemaVersion: {type: integer, const: 1}
+        occurredAt: {type: string, format: date-time}
+        payload: {type: object}
+    Tombstone:
+      type: object
+      additionalProperties: false
+      required: [stoneId, sourceVersion]
+      properties:
+        stoneId: {type: integer, minimum: 1, maximum: 9007199254740991}
+        sourceVersion: {type: integer, minimum: 1}
+    CardSnapshot:
+      type: object
+      additionalProperties: false
+      required: [stoneId, sourceVersion, name, stoneType, stoneSize, biography]
+      properties:
+        stoneId: {type: integer, minimum: 1, maximum: 9007199254740991}
+        sourceVersion: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 120}
+        stoneType: {type: string, enum: [BASALT, GRANITE, OBSIDIAN, PUMICE, LIMESTONE, SANDSTONE, SHALE, MARBLE, GNEISS, SLATE]}
+        stoneSize: {type: string, enum: [SMALL, MEDIUM, LARGE]}
+        biography: {type: [string, 'null'], maxLength: 2048}

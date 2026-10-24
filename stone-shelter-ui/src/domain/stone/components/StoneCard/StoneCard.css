@@ -1,0 +1,16 @@
+.stone-card { min-width: 0; overflow: hidden; border: 1px solid #e1e5de; border-radius: 12px; background: var(--color-surface); }
+.stone-photo { display: block; width: 100%; aspect-ratio: 1.4; object-fit: cover; background: #f0eee9; }
+.stone-photo-link { display: block; color: inherit; }
+.stone-photo-link:focus-visible { outline: 3px solid var(--color-accent); outline-offset: -4px; border-radius: 10px 10px 0 0; }
+.stone-content { padding: 12px; }
+.stone-content h2 { font-size: 16px; line-height: 1.25; margin: 0 0 10px; text-transform: uppercase; overflow-wrap: anywhere; }
+.stone-facts { margin: 0; display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.stone-facts div { min-width: 0; }
+.stone-facts dt { color: var(--color-muted); font-size: 11px; margin-bottom: 3px; }
+.stone-facts dd { margin: 0; overflow-wrap: anywhere; }
+.stone-biography { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 13px; line-height: 1.5; min-height: 3em; margin: 12px 0 0; }
+@media (max-width: 559px) {
+  .stone-content { padding: 16px; }
+  .stone-content h2 { font-size: 18px; }
+  .stone-facts, .stone-biography { font-size: 14px; }
+}

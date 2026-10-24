@@ -1,0 +1,31 @@
+.stone-details-page { max-width: 1440px; margin: 0 auto; padding: 30px 40px 64px; min-height: calc(100vh - 160px); }
+.stone-details-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 24px; margin-bottom: 28px; font-size: 14px; color: var(--color-muted); overflow-wrap: anywhere; }
+.stone-details-navigation a { color: var(--color-accent); text-decoration: none; padding: 4px 0; }
+.stone-details-navigation a:hover { text-decoration: underline; }
+.stone-details-navigation a:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 5px; border-radius: 2px; }
+.stone-details-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(32px, 4vw, 64px); align-items: start; }
+.stone-details-information { min-width: 0; }
+.stone-details-identity h1 { font-size: clamp(26px, 2.5vw, 36px); line-height: 1.2; text-transform: uppercase; margin: 0 0 10px; overflow-wrap: anywhere; }
+.stone-details-identity h1:focus, .stone-details-not-found h1:focus { outline: none; }
+.stone-details-id { font-size: 14px; color: var(--color-muted); margin: 0 0 16px; }
+.stone-status { display: inline-block; padding: 7px 12px; border-radius: 16px; color: var(--color-accent); background: #edf2ea; font-size: 13px; }
+.stone-details-characteristics, .stone-details-biography { margin-top: 32px; }
+.stone-details-information h2 { font-size: 18px; margin: 0 0 18px; }
+.stone-details-characteristics dl { margin: 0; display: grid; gap: 16px; }
+.stone-details-characteristics dl div { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(0, 1fr); gap: 16px; font-size: 14px; line-height: 1.5; }
+.stone-details-characteristics dt { color: var(--color-muted); }
+.stone-details-characteristics dd { margin: 0; overflow-wrap: anywhere; }
+.stone-details-biography p { margin: 0; font-size: 15px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.stone-details-not-found { max-width: 560px; padding: 40px 0; line-height: 1.7; }
+.stone-details-not-found h1 { font-size: 28px; }
+@media (max-width: 959px) {
+  .stone-details-page { padding: 24px 24px 48px; }
+  .stone-details-grid { grid-template-columns: minmax(0, 1fr); max-width: 680px; margin: 0 auto; gap: 30px; }
+}
+@media (max-width: 559px) {
+  .stone-details-page { padding: 20px 20px 40px; }
+  .stone-details-navigation { gap: 10px; margin-bottom: 22px; font-size: 13px; }
+  .stone-details-grid { gap: 26px; }
+  .stone-details-characteristics, .stone-details-biography { margin-top: 28px; }
+  .stone-details-characteristics dl div { grid-template-columns: minmax(90px, .7fr) minmax(0, 1fr); gap: 12px; }
+}

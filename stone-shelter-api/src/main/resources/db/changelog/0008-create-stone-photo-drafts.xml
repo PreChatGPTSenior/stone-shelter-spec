@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="0008-stone-photo-drafts" author="stone-shelter">
+        <addColumn tableName="stone">
+            <column name="storage_uuid" type="UUID" defaultValueComputed="gen_random_uuid()"><constraints nullable="false"/></column>
+        </addColumn>
+        <addUniqueConstraint tableName="stone" columnNames="storage_uuid" constraintName="uq_stone_storage_uuid"/>
+        <createTable tableName="stone_photo_draft">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="object_key" type="VARCHAR(500)"><constraints nullable="false" unique="true"/></column>
+            <column name="uploaded_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="stone_id" type="BIGINT"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="stone_photo_draft" baseColumnNames="stone_id"
+            referencedTableName="stone" referencedColumnNames="id" constraintName="fk_draft_stone" onDelete="CASCADE"/>
+        <createIndex tableName="stone_photo_draft" indexName="ix_draft_stone"><column name="stone_id"/></createIndex>
+        <createIndex tableName="stone_photo_draft" indexName="ix_draft_expiry"><column name="expires_at"/></createIndex>
+        <addColumn tableName="stone_photo">
+            <column name="draft_id" type="UUID"/>
+            <column name="copy_ready" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+        </addColumn>
+        <addUniqueConstraint tableName="stone_photo" columnNames="draft_id" constraintName="uq_photo_draft"/>
+        <addForeignKeyConstraint baseTableName="stone_photo" baseColumnNames="draft_id"
+            referencedTableName="stone_photo_draft" referencedColumnNames="id" constraintName="fk_photo_draft" onDelete="SET NULL"/>
+        <addColumn tableName="photo_cleanup">
+            <column name="bucket_type" type="VARCHAR(16)" defaultValue="PERMANENT"><constraints nullable="false"/></column>
+        </addColumn>
+        <dropPrimaryKey tableName="photo_cleanup" constraintName="photo_cleanup_pkey"/>
+        <addPrimaryKey tableName="photo_cleanup" columnNames="object_key,bucket_type" constraintName="pk_photo_cleanup"/>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""Plan or execute an explicitly selected local ticket batch through independent agents."""
+from __future__ import annotations
+import argparse,concurrent.futures,fcntl,json,os,subprocess,sys,threading,time,uuid
+from pathlib import Path
+from execution.core import ROOT,Blocked,State,check_scope,command,decide_gate,identity,json_read,json_write,select_tasks,sha,tasks
+from execution.environment import configure,probe,runtime_env,start,stop,toolchain
+from execution.gates import browser,report,selected_tests,static_gate,verify_artifacts
+
+INTEGRATION=threading.Lock()
+ROLES=['developer','code_review','test_engineer','test_review','browser_planner','browser_review']
+def plan(selected,status=None):
+ status=status or {};done={k for k,v in status.items() if v['status']=='DONE'}
+ remaining={t['id']:t for t in selected if t['id'] not in done};waves=[]
+ while remaining:
+  candidates=[t for t in remaining.values() if set(t['depends_on'])<=done]
+  if not candidates:break
+  claimed=set();wave=[]
+  for t in candidates:
+   if claimed.intersection(t['exclusive_resources']):continue
+   wave.append(t['id']);claimed.update(t['exclusive_resources'])
+  waves.append(wave);done.update(wave)
+  for tid in wave:del remaining[tid]
+ return {'mode':'PLAN_ONLY','waves':waves,'blocked_dependencies':{k:[d for d in t['depends_on'] if d not in done] for k,t in remaining.items()},'limits':{'workers':3,'backend_writers':1,'frontend_writers':1,'model_runtime':1},'implementation_executed':False}
+
+def actor(role,task,tree,run,context):
+ session=str(uuid.uuid4());output=run/(role+'-'+session+'.json');log=run/(role+'-'+session+'.jsonl')
+ prompt=(ROOT/'execution/prompts'/f'{role}.md').read_text()+'\n\nAssigned task:\n'+json.dumps(task,indent=2)+'\n\nCoordinator context:\n'+json.dumps(context,indent=2)+'\n\nRepository root: '+str(tree)+'\nDo not modify sibling projects, coordinator state, policy, task registry, or source snapshots. Do not commit or push. The coordinator records evidence.\n'
+ args=['codex','exec','--ephemeral','--sandbox','workspace-write' if role=='developer' else 'read-only','--cd',str(tree),'--output-schema',str(ROOT/'templates/agent-result.schema.json'),'--output-last-message',str(output),'--json','-']
+ try:
+  with log.open('w') as f:
+   r=subprocess.run(args,input=prompt,stdout=f,stderr=subprocess.STDOUT,text=True,timeout=task['timeout_seconds'])
+ except (OSError,subprocess.TimeoutExpired) as e:raise Blocked('Agent failed/timed out: '+role) from e
+ if r.returncode or not output.exists():raise Blocked('Agent did not produce valid result: '+role)
+ result=json_read(output)
+ if set(result)!={'status','summary','findings','evidence'} or result['status']!='APPROVED' or result['findings']:raise Blocked(role+' returned findings or blocked: '+str(result.get('summary',''))[:300])
+ return output,session
+
+def changed(tree,base):
+ # Only a new project worktree is queried. Protected names are excluded by Git pathspec before output.
+ args=['git','diff','--name-only',base,'--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**']
+ names=command(args,cwd=tree).splitlines()
+ names+=command(['git','ls-files','--others','--exclude-standard','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**'],cwd=tree).splitlines()
+ return sorted(set(names))
+
+def prepare_dependencies(tree,env):
+ command(['npm','ci','--ignore-scripts','--no-audit','--no-fund','--cache',str(ROOT/'.cache/npm')],cwd=tree,env=env,timeout=600)
+ command(['npm','ci','--ignore-scripts','--no-audit','--no-fund','--cache',str(ROOT/'.cache/npm')],cwd=tree/'stone-shelter-ui',env=env,timeout=600)
+
+def cycle(task,tree,run,env,stack,base):
+ run.mkdir(parents=True,exist_ok=True);candidate=identity(tree)
+ if 'docker' in task['environment']:start(stack,candidate)
+ checks=probe(stack,task,env,include_tools=True)
+ p=run/'environment-raw.json';json_write(p,{'covered_task_ids':[task['id']],'candidate':candidate,'checks':checks,'status':'READY'})
+ reports={'environment':report(run,'environment',task,candidate,[p])}
+ names=changed(tree,base);check_scope(task,names)
+ reports['static']=static_gate(task,tree,run,env,candidate,names)
+ context={'candidate':candidate,'base_commit':base,'changed_files':names,'reports':reports,'run_directory':str(run),'review_scope':'ticket deliverables; acceptance IDs are contributions, whole scenarios are release-qualified'}
+ out,who=actor('code_review',task,tree,run,context)
+ reports['code_review']=report(run,'code_review',task,candidate,[out],actor=who)
+ if identity(tree)!=candidate:raise Blocked('Review changed the candidate')
+ reports['tests']=selected_tests(task,tree,run,env,stack,candidate)
+ for role in ['test_engineer','test_review']:
+  context['reports']=reports;out,who=actor(role,task,tree,run,context)
+  reports[role]=report(run,role,task,candidate,[out],actor=who)
+ context['reports']=reports;out,who=actor('browser_planner',task,tree,run,context)
+ reports['browser_planner']=report(run,'browser_planner',task,candidate,[out],actor=who)
+ reports['browser']=browser(task,tree,run,env,stack,candidate)
+ context['reports']=reports;out,who=actor('browser_review',task,tree,run,context)
+ reports['browser_review']=report(run,'browser_review',task,candidate,[out],actor=who)
+ if identity(tree)!=candidate:raise Blocked('Candidate changed after review')
+ verify_artifacts(reports);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
+ return result
+
+def work(task,state,coordinator,env):
+ owner=uuid.uuid4().hex;state.claim(task,owner);run=ROOT/'.execution/runs'/owner;run.mkdir(parents=True)
+ tree=ROOT/'.execution/worktrees'/(task['id']+'-'+owner[:8]);stack=None
+ try:
+  base=command(['git','rev-parse','HEAD'],cwd=coordinator).strip()
+  if task['kind']=='readiness':
+   checks=toolchain(env)
+   p=run/'readiness.json';json_write(p,{'status':'READY','covered_task_ids':[task['id']],'checks':checks,'meaning':'Feature prerequisite checked; each actual frontier is rechecked as a whole before developers run'})
+   arrive(task,json_read(p));state.set(task['id'],'DONE',owner,base);return
+  command(['git','worktree','add','-b','codex/'+task['id'].lower()+'-'+owner[:8],str(tree),base],timeout=60)
+  stack=configure(tree,run,owner,env)
+  prepare_dependencies(tree,env)
+  # Required prerequisites are checked before application edits.
+  if 'docker' in task['environment']:start(stack,identity(tree))
+  checks=probe(stack,task,env,include_tools=True)
+  json_write(run/'pre-implementation.json',{'covered_task_ids':[task['id']],'status':'READY','checks':checks})
+  state.set(task['id'],'DEVELOPING',owner,base)
+  arrive(task,json_read(run/'pre-implementation.json'))
+  feedback=None
+  for attempt in range(task['max_attempts']):
+   probe(stack,task,env,include_tools=True)
+   attempt_run=run/('attempt-'+str(attempt+1));attempt_run.mkdir()
+   out,_=actor('developer',task,tree,attempt_run,{'base_commit':base,'run_directory':str(run),'readiness':str(run/'pre-implementation.json'),'stack_urls':{k:stack[k] for k in ['api','ui']},'output_test_path':'quality/e2e/'+task['id']+'/*.spec.ts','previous_failure':feedback})
+   check_scope(task,changed(tree,base))
+   try:cycle(task,tree,attempt_run/'candidate',env,stack,base);break
+   except Blocked as failure:
+    if attempt+1>=task['max_attempts']:raise
+    feedback={'reason':str(failure),'evidence_directory':str(attempt_run),'instruction':'Diagnose the recorded failure before changing code; never repeat unchanged checks or widen scope'}
+    json_write(attempt_run/'failure.json',feedback)
+  names=changed(tree,base)
+  if names:
+   command(['git','add','--',*names],cwd=tree)
+   command(['git','commit','-m',task['change']+': '+task['title']+' ('+task['id']+')'],cwd=tree,timeout=60)
+  with INTEGRATION:
+   latest=command(['git','rev-parse','HEAD'],cwd=coordinator).strip()
+   if latest!=base:
+    try:command(['git','rebase',latest],cwd=tree,timeout=120)
+    except Blocked:
+     subprocess.run(['git','rebase','--abort'],cwd=tree,capture_output=True)
+     raise Blocked('Integration conflict: preserve task branch and repair after review; no automatic semantic resolution')
+   # Reverify integrated content even when no textual conflict occurred.
+   cycle(task,tree,run/'integration',env,stack,latest)
+   head=command(['git','rev-parse','HEAD'],cwd=tree).strip()
+   command(['git','merge','--ff-only',head],cwd=coordinator,timeout=60)
+   state.set(task['id'],'DONE',owner,head,'Verified integrated candidate; no remote push')
+ except BaseException as error:
+  state.set(task['id'],'BLOCKED',owner,detail=str(error)[:500]);raise
+ finally:
+  if stack and 'docker' in task['environment']:
+   try:stop(stack)
+   except Blocked:pass
+  state.release(owner)
+
+def run(selected,workers):
+ # Run is opt-in; preparation never invokes it. No blanket sandbox bypass is used.
+ env=runtime_env();toolchain(env)
+ state=State(ROOT/'.execution/state.sqlite');coordinator=ROOT/'.execution/integration'
+ if not coordinator.exists():command(['git','worktree','add','-b','codex/integration',str(coordinator),'HEAD'],timeout=60)
+ dirty=command(['git','status','--porcelain','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**'],cwd=coordinator).strip()
+ if dirty:raise Blocked('Integration worktree has unreviewed local changes')
+ for tid,value in state.status().items():
+  if value['status']=='DONE' and value.get('commit'):
+   command(['git','merge-base','--is-ancestor',value['commit'],'HEAD'],cwd=coordinator)
+ policy=ROOT/'.execution/policy.json';fingerprint=identity(ROOT)
+ if policy.exists() and json_read(policy)['fingerprint']!=fingerprint:raise Blocked('Execution package changed; prior state needs explicit requalification')
+ if not policy.exists():json_write(policy,{'fingerprint':fingerprint})
+ # Validate package before trusting executable selectors.
+ command([sys.executable,str(ROOT/'tools/validate_execution.py')])
+ active={};failed=False
+ with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+  while True:
+   statuses=state.status();done={k for k,v in statuses.items() if v['status']=='DONE'}
+   if all(t['id'] in done for t in selected):break
+   if not failed:
+    busy=set().union(*(set(t['exclusive_resources']) for t in active.values())) if active else set()
+    frontier=[]
+    for task in selected:
+     if task['id'] in done or task['id'] in {x['id'] for x in active.values()}:continue
+     if statuses.get(task['id'],{}).get('status') in {'BLOCKED','CLAIMED','DEVELOPING'}:continue
+     if not set(task['depends_on'])<=done or busy.intersection(task['exclusive_resources']):continue
+     if len(active)+len(frontier)>=workers:break
+     frontier.append(task);busy.update(task['exclusive_resources'])
+    if frontier:
+     # The entire selected frontier is the batch. Dependencies are already integrated;
+     # every worker completes its read-only preflight before entering the shared start barrier.
+     batchid=uuid.uuid4().hex;json_write(ROOT/'.execution/batches'/f'{batchid}.json',{'status':'CHECKING','task_ids':[t['id'] for t in frontier],'rule':'All prerequisites must pass before the batch begins'})
+     # Initial tools/resources are checked for all tickets. Per-stack checks are enforced by worker barriers below.
+     receipts={}
+     def ready_batch(batch=batchid,received=receipts,ids=[t['id'] for t in frontier]):
+      if set(received)!=set(ids):raise Blocked('Incomplete batch readiness')
+      json_write(ROOT/'.execution/batches'/f'{batch}.json',{'status':'READY','task_ids':ids,'receipts':received})
+      print(json.dumps({'batch':batch,'task_ids':ids,'readiness':'READY'}),flush=True)
+     barrier=threading.Barrier(len(frontier),action=ready_batch)
+     for task in frontier:
+      active[pool.submit(work_batch,task,state,coordinator,env,barrier,receipts)]=task
+   if not active:break
+   complete,_=concurrent.futures.wait(active,timeout=1,return_when=concurrent.futures.FIRST_COMPLETED)
+   for f in complete:
+    task=active.pop(f)
+    try:f.result();print(json.dumps({'task':task['id'],'status':'DONE'}),flush=True)
+    except BaseException as e:failed=True;print(json.dumps({'task':task['id'],'status':'BLOCKED','reason':str(e)[:500]}),flush=True)
+ statuses=state.status();json_write(ROOT/'.execution/result.json',statuses)
+ return 0 if all(statuses.get(t['id'],{}).get('status')=='DONE' for t in selected) else 2
+
+# Each frontier has a fresh whole-batch readiness barrier before any edits.
+LOCAL=threading.local()
+
+def arrive(task,receipt):
+ if not getattr(LOCAL,'barrier',None):return
+ LOCAL.receipts[task['id']]=receipt
+ LOCAL.barrier.wait(timeout=1800)
+ LOCAL.barrier=None
+
+def work_batch(task,state,coordinator,env,barrier,receipts):
+ LOCAL.barrier=barrier;LOCAL.receipts=receipts
+ try:return work(task,state,coordinator,env)
+ except BaseException:
+  barrier.abort();raise
+
+def main():
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['plan','status','doctor','run','retry']);p.add_argument('--tasks',nargs='+',default=['all']);p.add_argument('--execute',action='store_true');p.add_argument('--workers',type=int,default=2);args=p.parse_args()
+ try:
+  selected=select_tasks(args.tasks)
+  if args.action=='plan':print(json.dumps(plan(selected),indent=2));return 0
+  if args.action=='doctor':print(json.dumps({'scope':'toolchain only; task stacks are verified by run','status':'READY','checks':toolchain(runtime_env())},indent=2));return 0
+  if args.action=='status':
+   file=ROOT/'.execution/state.sqlite';print(json.dumps(State(file).status() if file.exists() else {'status':'NOT_STARTED'},indent=2));return 0
+  if not args.execute:raise Blocked('Execution requires --execute and explicitly selected --tasks')
+  if args.action=='retry':
+   state=State(ROOT/'.execution/state.sqlite')
+   for t in selected:
+    s=state.status().get(t['id'])
+    if s and s['status']=='BLOCKED':state.set(t['id'],'RETRY',s['owner'],detail='Explicit retry requested; previous branch retained')
+   print(json.dumps({'status':'RETRY_ENABLED','next':'Run the selected task again; previous worktrees and evidence are preserved'}));return 0
+  if not 1<=args.workers<=3:raise Blocked('Workers must be 1..3')
+  (ROOT/'.execution').mkdir(exist_ok=True)
+  with (ROOT/'.execution/coordinator.lock').open('a') as lock:
+   try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+   except BlockingIOError:raise Blocked('Another coordinator is active')
+   dirty=command(['git','status','--porcelain','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**']).strip()
+   if dirty:raise Blocked('Launch from a committed clean execution repository')
+   return run(selected,args.workers)
+ except (Blocked,ValueError,KeyError,OSError) as e:print(json.dumps({'status':'BLOCKED','reason':str(e)}));return 2
+if __name__=='__main__':raise SystemExit(main())

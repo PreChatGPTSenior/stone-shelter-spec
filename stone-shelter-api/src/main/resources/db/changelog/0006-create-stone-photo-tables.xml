@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="0006-stone-photos" author="stone-shelter">
+        <createTable tableName="stone_photo">
+            <column name="id" type="BIGINT" autoIncrement="true"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="stone_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="object_key" type="VARCHAR(500)"><constraints nullable="false" unique="true"/></column>
+            <column name="added_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="position" type="INT"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="stone_photo" baseColumnNames="stone_id"
+            referencedTableName="stone" referencedColumnNames="id" constraintName="fk_stone_photo_stone" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="stone_photo" columnNames="stone_id,position" constraintName="uq_stone_photo_position"/>
+        <sql>ALTER TABLE stone_photo ADD CONSTRAINT ck_stone_photo_position CHECK (position &gt;= 0)</sql>
+        <createTable tableName="photo_cleanup">
+            <column name="object_key" type="VARCHAR(500)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="available_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="photo_cleanup" indexName="ix_photo_cleanup_available_at"><column name="available_at"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

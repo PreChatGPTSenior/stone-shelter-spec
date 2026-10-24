@@ -1,0 +1,17 @@
+.add-stone-page { max-width: 1440px; margin: 0 auto; padding: 30px 40px 64px; min-height: calc(100vh - 160px); }
+.add-stone-navigation { margin-bottom: 24px; font-size: 14px; }
+.add-stone-navigation a { color: var(--color-accent); text-decoration: none; padding: 4px 0; }
+.add-stone-navigation a:hover { text-decoration: underline; }
+.add-stone-page > h1 { margin: 0 0 32px; font-size: clamp(26px, 2.5vw, 36px); line-height: 1.2; }
+.add-stone-success { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(24px, 4vw, 64px); align-items: start; }
+.add-stone-confirmation { min-width: 0; padding-top: 16px; }
+.add-stone-confirmation h2 { color: var(--color-accent); font-size: 24px; line-height: 1.4; margin: 0 0 24px; }
+.add-stone-name { font-size: 22px; font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
+.add-stone-id { color: var(--color-muted); font-size: 14px; }
+.add-stone-result-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+.add-stone-secondary { padding: 12px 24px; border: 1px solid var(--color-accent); border-radius: 8px; background: white; color: var(--color-accent); font: inherit; cursor: pointer; }
+.add-stone-page :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.add-stone-page h1:focus, .add-stone-confirmation h2:focus { outline: none; }
+@media (max-width: 959px) { .add-stone-page { padding: 24px 24px 48px; } .add-stone-success { grid-template-columns: minmax(0, 1fr); max-width: 680px; margin: 0 auto; gap: 24px; } }
+@media (max-width: 559px) { .add-stone-page { padding: 20px 20px 40px; } .add-stone-result-actions { flex-direction: column; } }
+@media (prefers-reduced-motion: reduce) { .add-stone-page *, .add-stone-page *::before, .add-stone-page *::after { animation: none; transition: none; scroll-behavior: auto; } }

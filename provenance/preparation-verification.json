@@ -1,0 +1,18 @@
+{
+  "status": "PACKAGE_VERIFIED",
+  "openspec_changes": 8,
+  "tasks": 48,
+  "requirements": 85,
+  "acceptance_scenarios": 36,
+  "checks": {
+    "coordinator_tests": 29,
+    "static_analyzer_tests": 13,
+    "runtime_browser_tests": 20,
+    "skill_validation": 7
+  },
+  "source_files_unchanged": 716,
+  "application_implementation": "NOT_RUN",
+  "application_acceptance": "NOT_RUN",
+  "real_agents": "NOT_LAUNCHED",
+  "application_sonar": "NOT_RUN"
+}

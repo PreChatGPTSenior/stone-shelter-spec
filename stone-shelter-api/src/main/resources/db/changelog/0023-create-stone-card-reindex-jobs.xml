@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.0.xsd">
+    <changeSet id="0023-create-stone-card-reindex-jobs" author="stone-shelter">
+        <sql><![CDATA[
+CREATE TABLE stone_card_reindex_job (
+    job_id UUID PRIMARY KEY,
+    target TEXT NOT NULL CHECK (target IN ('ALL', 'SELECTED')),
+    status TEXT NOT NULL CHECK (status IN ('PENDING', 'RUNNING', 'ENQUEUED')),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+CREATE UNIQUE INDEX ix_stone_card_reindex_one_active ON stone_card_reindex_job ((TRUE)) WHERE status IN ('PENDING', 'RUNNING');
+CREATE TABLE stone_card_reindex_item (
+    job_id UUID NOT NULL REFERENCES stone_card_reindex_job(job_id),
+    stone_id BIGINT NOT NULL CHECK (stone_id > 0),
+    work_kind TEXT NOT NULL CHECK (work_kind IN ('CARD', 'ORPHAN')),
+    outcome TEXT NOT NULL CHECK (outcome IN ('PENDING', 'ENQUEUED', 'SKIPPED', 'FAILED', 'RECONCILED')),
+    error TEXT,
+    PRIMARY KEY (job_id, stone_id, work_kind)
+);
+CREATE INDEX ix_stone_card_reindex_pending ON stone_card_reindex_item (job_id, outcome, stone_id);
+CREATE TABLE stone_card_reindex_control (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    active_job UUID REFERENCES stone_card_reindex_job(job_id),
+    creation_blocked BOOLEAN NOT NULL,
+    CHECK (active_job IS NOT NULL OR creation_blocked = FALSE)
+);
+INSERT INTO stone_card_reindex_control VALUES (1, NULL, FALSE);
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>

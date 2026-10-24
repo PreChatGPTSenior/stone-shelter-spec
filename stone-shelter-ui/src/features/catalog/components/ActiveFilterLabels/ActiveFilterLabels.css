@@ -1,0 +1,7 @@
+.active-filter-labels { margin: 0 0 20px; }
+.active-filter-labels ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.active-filter-labels li { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; gap: 4px; padding: 2px 4px 2px 12px; border: 1px solid #d7e2d3; border-radius: 18px; background: #edf2ea; color: var(--color-accent); font-size: 13px; }
+.active-filter-labels li > span { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+.active-filter-labels button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: inherit; font-size: 20px; cursor: pointer; }
+.active-filter-labels button:hover { background: #dce8d7; }
+.active-filter-labels button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }

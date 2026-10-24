@@ -1,0 +1,22 @@
+name: Execution package
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14.8'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm run check:specs
+        env:
+          OPENSPEC_TELEMETRY: '0'
+          DO_NOT_TRACK: '1'
