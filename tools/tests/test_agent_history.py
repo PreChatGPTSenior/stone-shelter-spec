@@ -10,11 +10,12 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
 from execution.core import Blocked, State, json_write, sha, stable
 from execution.history import History, read_rows, recovery_status, require_recovered, timeline, verify_evidence
-from execution.audit_backup import backup, idle, restore, verify
+from execution.audit_backup import backup, idle, restore, verify, walk
 from execution.budgets import Budgets
 
 
@@ -199,6 +200,131 @@ os._exit(17)
         source.write_text('<changed/>')
         run = self.directory / 'runs/attempt'; run.mkdir(parents=True)
         with self.assertRaises(Blocked): retain_static_artifacts(run,[source],expected)
+
+    def test_retained_artifacts_block_missing_and_recreated_empty_history(self):
+        names = ('runs/orphan/result.json', 'model-preflight/orphan/batch.json',
+                 'batches/orphan/result.json', 'worktrees/orphan/file.txt',
+                 'integration/file.txt', 'policy.json', 'result.json', 'budget-stop.json',
+                 'state.sqlite-wal', 'budgets.sqlite-journal', 'trace.sqlite-shm')
+        for index, name in enumerate(names):
+            for empty_trace in (False, True):
+                # A sidecar belongs to an existing empty trace, not a missing database.
+                if empty_trace and name == 'trace.sqlite-shm': continue
+                with self.subTest(name=name, empty_trace=empty_trace):
+                    directory = self.root / f'orphan-{index}-{empty_trace}'
+                    artifact = directory / name; artifact.parent.mkdir(parents=True)
+                    artifact.write_text('fixture')
+                    if empty_trace: History(directory / 'trace.sqlite')
+                    self.assertEqual('RECOVERY_REQUIRED', recovery_status(directory)['status'])
+                    with self.assertRaises(Blocked): require_recovered(directory)
+                    with self.assertRaises(Blocked): backup(directory, self.root / f'rejected-{index}-{empty_trace}')
+                    self.assertFalse((directory / 'state.sqlite').exists())
+                    self.assertFalse((directory / 'budgets.sqlite').exists())
+                    self.assertEqual('fixture', artifact.read_text())
+
+    def test_orphaned_attempt_directory_blocks_but_empty_roots_are_fresh(self):
+        for name in ('runs', 'model-preflight', 'batches', 'worktrees', 'integration'):
+            (self.directory / name).mkdir()
+        self.assertEqual('NO_UNRESOLVED_EXECUTION', require_recovered(self.directory)['status'])
+        (self.directory / 'runs/orphan').mkdir()
+        with self.assertRaises(Blocked): require_recovered(self.directory)
+
+    def test_backup_excludes_secret_files_and_restores_public_evidence_only(self):
+        self.journal.append('fixture')
+        folder = self.directory / 'runs/attempt'; folder.mkdir(parents=True)
+        names = ('stack.env', '.env', '.env.production', 'STACK.ENV', 'stack.env.backup',
+                 'private.pem', 'private.key', 'credentials.json', 'auth.json', 'secrets/token.txt')
+        for name in names:
+            path = folder / name; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('private-fixture')
+        artifact = folder / 'result.json'; json_write(artifact, {'status':'fixture'})
+        destination = self.root / 'clean-backup'; manifest = backup(self.directory, destination)
+        restored = self.root / 'clean-restore'; restore(destination, restored)
+        self.assertEqual(sha(artifact), sha(restored / 'runs/attempt/result.json'))
+        for name in names:
+            relative = 'runs/attempt/' + name
+            self.assertNotIn(relative, manifest['files'])
+            self.assertFalse((destination / relative).exists())
+            self.assertFalse((restored / relative).exists())
+            self.assertEqual('private-fixture', (folder / name).read_text())
+
+    def test_manifest_secret_paths_reject_before_restore_destination_creation(self):
+        destination = self.root / 'backup'; backup(self.directory, destination)
+        original = json.loads((destination / 'manifest.json').read_text())
+        for index, name in enumerate(('runs/attempt/stack.env', 'runs/attempt/.env.local',
+                                     'runs/attempt/secrets/token.json', 'runs/attempt/key.pem')):
+            with self.subTest(name=name):
+                manifest = {**original, 'files':{**original['files'], name:'unread'}}
+                json_write(destination / 'manifest.json', manifest)
+                with self.assertRaises(Blocked): verify(destination)
+                target = self.root / f'rejected-secret-{index}'
+                with self.assertRaises(Blocked): restore(destination, target)
+                self.assertFalse(target.exists())
+
+    def test_unmanifested_secret_file_also_rejects_archive(self):
+        destination = self.root / 'backup'; backup(self.directory, destination)
+        secret = destination / 'runs/attempt/stack.env'; secret.parent.mkdir(parents=True)
+        secret.write_text('private-fixture')
+        with self.assertRaises(Blocked): verify(destination)
+        with self.assertRaises(Blocked): restore(destination, self.root / 'rejected')
+        self.assertFalse((self.root / 'rejected').exists())
+
+    def test_secret_exclusion_precedes_metadata_access(self):
+        def forbidden(): raise AssertionError('Secret metadata accessed')
+        entry = SimpleNamespace(name='stack.env', is_symlink=forbidden, is_dir=forbidden, is_file=forbidden)
+        with patch('execution.audit_backup.os.scandir') as scan:
+            scan.return_value.__enter__.return_value = [entry]
+            self.assertEqual([], list(walk(self.directory)))
+            with self.assertRaises(Blocked): list(walk(self.directory, reject_secrets=True))
+
+    def test_required_secret_evidence_cannot_be_silently_dropped(self):
+        folder = self.directory / 'runs/attempt'; folder.mkdir(parents=True)
+        secret = folder / 'stack.env'; secret.write_text('private-fixture')
+        report = {'artifact_hashes':{str(secret):sha(secret)}}
+        envelope = folder / 'static.json'; json_write(envelope, report)
+        self.journal.append('stage.completed', payload={'report':report,
+            'artifact':str(envelope), 'sha256':sha(envelope)})
+        with self.assertRaises(Blocked): backup(self.directory, self.root / 'rejected')
+        self.assertFalse((self.root / 'rejected').exists())
+        self.assertEqual('private-fixture', secret.read_text())
+
+    def test_standalone_preflight_checks_recovery_before_writing_attempt(self):
+        import orchestrate as engine
+        for blocked in (False, True):
+            with self.subTest(blocked=blocked):
+                root = self.root / f'preflight-{blocked}'; root.mkdir()
+                def inspect(directory):
+                    self.assertFalse((directory / 'model-preflight').exists())
+                    if blocked: raise Blocked('Retained prior execution')
+                    return require_recovered(directory)
+                with patch.object(engine,'ROOT',root), patch.object(engine,'select_tasks',return_value=[]), \
+                        patch.object(engine,'tasks',return_value=[self.task]), \
+                        patch.object(engine,'load_models',return_value={}), \
+                        patch.object(engine,'model_selections',return_value=[{'fixture':True}]), \
+                        patch.object(engine,'require_recovered',side_effect=inspect), \
+                        patch.object(engine,'load_budgets',return_value={}), \
+                        patch.object(engine,'Budgets') as writer, \
+                        patch.object(engine,'live_preflight',return_value={}) as probe, \
+                        patch.object(sys,'argv',['orchestrate','model-preflight','--execute']), \
+                        patch('builtins.print'):
+                    self.assertEqual(2 if blocked else 0, engine.main())
+                    if blocked:
+                        writer.assert_not_called(); probe.assert_not_called()
+                        self.assertFalse((root / '.execution/model-preflight').exists())
+                    else:
+                        writer.assert_called_once(); probe.assert_called_once()
+
+    def test_retry_refuses_orphaned_history_before_state_creation(self):
+        import orchestrate as engine
+        artifact = self.directory / 'runs/orphan/result.json'; json_write(artifact, {'fixture':True})
+        with patch.object(engine,'ROOT',self.root), patch.object(engine,'select_tasks',return_value=[self.task]), \
+                patch.object(engine,'State') as writer, \
+                patch.object(sys,'argv',['orchestrate','retry','--tasks',self.task['id'],'--execute']), \
+                patch('builtins.print'):
+            self.assertEqual(2, engine.main())
+            writer.assert_not_called()
+        self.assertFalse((self.directory / 'state.sqlite').exists())
+        self.assertEqual({'fixture':True}, json.loads(artifact.read_text()))
 
 
 if __name__ == '__main__': unittest.main()

@@ -8,11 +8,8 @@ import sqlite3
 import time
 
 from .core import Blocked, json_read, json_write, safe, sha
-from .history import timeline, verify_evidence
-
-DATABASES = ('state.sqlite', 'budgets.sqlite', 'trace.sqlite')
-TREES = ('runs', 'model-preflight', 'batches')
-LEAVES = ('usage.jsonl', 'policy.json', 'result.json', 'budget-stop.json')
+from .history import verify_evidence
+from .audit_paths import DATABASES, TREES, LEAVES, PROTECTED_NAMES, secret_path
 
 
 def checked(path):
@@ -31,12 +28,15 @@ def idle(directory):
         yield
 
 
-def walk(folder):
+def walk(folder, *, reject_secrets=False):
     with os.scandir(folder) as entries:
         for entry in sorted(entries, key=lambda row: row.name):
-            if entry.name.lower() in {'engineering-log', '.git'} or entry.name.startswith('.env'): continue
+            if entry.name.lower() in PROTECTED_NAMES: continue
+            if secret_path((entry.name,)):
+                if reject_secrets: raise Blocked('Audit copy contains an excluded secret path; re-export from preserved source')
+                continue
             if entry.is_symlink(): raise Blocked('Audit backup rejects symlinks')
-            if entry.is_dir(follow_symlinks=False): yield from walk(Path(entry.path))
+            if entry.is_dir(follow_symlinks=False): yield from walk(Path(entry.path), reject_secrets=reject_secrets)
             elif entry.is_file(follow_symlinks=False): yield Path(entry.path)
 
 
@@ -59,9 +59,13 @@ def verify(directory):
     manifest = json_read(safe(directory, 'manifest.json'))
     if manifest.get('schema') != 1 or not isinstance(manifest.get('files'), dict):
         raise Blocked('Invalid audit manifest')
+    # Also refuse secret files omitted from the manifest, without reading their bytes.
+    for _ in walk(directory, reject_secrets=True):
+        pass
     for name, digest in manifest['files'].items():
-        path = safe(directory, name)
         parts = Path(name).parts
+        if secret_path(parts): raise Blocked('Audit manifest contains an excluded secret path')
+        path = safe(directory, name)
         if not parts or (parts[0] not in TREES and name not in DATABASES + LEAVES):
             raise Blocked('Unapproved audit artifact path')
         if not path.is_file() or sha(path) != digest: raise Blocked('Missing or changed audit artifact: ' + name)
@@ -96,7 +100,7 @@ def backup(directory, destination):
             name = str(source.relative_to(directory)); target = safe(destination, name)
             copy_private(source, target); paths.append(name)
         manifest = {'schema': 1, 'created_at_epoch': time.time(), 'source': str(directory),
-                    'scope': 'Audit databases and evidence only; excludes Git/worktrees, app volumes and model context',
+                    'scope': 'Audit databases and evidence only; excludes environment/credential/key files, Git/worktrees, app volumes and model context',
                     'files': {name: sha(destination / name) for name in paths}}
         json_write(destination / 'manifest.json', manifest)
         verify(destination)

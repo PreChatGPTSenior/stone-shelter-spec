@@ -8,6 +8,7 @@ import time
 import uuid
 
 from .core import Blocked, safe, sha, stable
+from .audit_paths import retained_artifacts, secret_path
 
 
 def read_rows(path, table):
@@ -100,6 +101,8 @@ def database_state(directory, events):
         gaps.append('Usage exists without budgets.sqlite')
     if not events and (state or leases or calls or stops or usage):
         gaps.append('Execution/accounting evidence lacks correlated history')
+    if not events and retained_artifacts(directory):
+        gaps.append('Retained execution artifacts lack history; preserve and reconcile, never treat as a fresh run')
     return state, leases, calls, stops, gaps
 
 
@@ -146,6 +149,8 @@ def verify_evidence(directory, events=None):
         if '.execution' in parts: parts = parts[parts.index('.execution') + 1:]
         if not parts or parts[0] not in ('runs', 'model-preflight', 'batches'):
             raise Blocked('Evidence is outside the audit directory')
+        if secret_path(parts):
+            raise Blocked('Required evidence references an excluded secret path; preserve source for reviewed reconciliation')
         return safe(directory, str(Path(*parts)))
     def verify_hash(reference, expected):
         path = artifact(reference)

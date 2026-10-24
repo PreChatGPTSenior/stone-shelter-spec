@@ -1,6 +1,16 @@
 # Preparation verification
 
-## Current follow-up: four review corrections (T0009-013)
+## Current follow-up: audit loss, secrets and recovery procedure (T0009-014)
+
+Status: **AUTHORED / TESTS NOT_RUN**. The user explicitly prohibits tests, agents and real model requests for this change. No new behavioral qualification or strict OpenSpec validation is claimed. The 102-test results below apply only to the preceding PR #1 revision, now merged as 9dc5cf9.
+
+Readiness: Python 3.14.8 and GitHub CLI available; scoped tracked files clean before authoring; new branch based on 9dc5cf9. Both provider USD limits remain 0.00 with no rates. Application services/models are not checked or started because this is source/document preparation only.
+
+Nine authored regression cases cover missing/recreated-empty history with retained artifacts, empty attempt versus empty root directories, secret exclusion with source preservation, unsafe manifest and unlisted secret files, exclusion before metadata, required-secret evidence refusal, preflight ordering and retry refusal before state creation. They are **NOT_RUN**, including their fake-provider stand-ins. Future focused validation, only when separately authorized: `python3 -m unittest discover -s tools/tests -p test_agent_history.py`; strict OpenSpec/package qualification remains pending as well.
+
+Publication uses `[skip ci]` so push/PR events do not start the existing test workflow. Observed static checks: AST parsing passed for the five changed/new Python files without importing or executing project code; Git diff whitespace inspection passed. These are not evidence of runtime correctness. No workflow definition or quality gate is relaxed; this revision must be tested before runtime qualification or merge approval.
+
+## Historical baseline: four review corrections (T0009-013)
 
 The user authorized fixes, offline regressions and an update to PR #1. Readiness rechecked Python 3.14.8, Node 24.21.0 and npm 11.19.0 against the pins. Both USD limits and the empty price table remain unchanged. No model, coding agent, provider credential helper, application service or application acceptance test was launched.
 

@@ -131,6 +131,39 @@ SQLite on local persistent storage MUST remain the state/history store for the s
 - **WHEN** a recorded stage report, analyzer result, test result, browser artifact or gate file is removed or modified
 - **THEN** history verification, startup admission and audit backup verification reject the incomplete evidence even if invocation logs remain intact.
 
+### Requirement: Detect orphaned audit artifacts
+Recovery MUST reject absent or empty history when retained execution artifacts exist, even if all three databases and usage.jsonl are missing. Detection MUST inspect only bounded owned paths, without reading secret contents or accessing protected paths. Fresh empty directories remain valid. Standalone preflight MUST check recovery under the coordinator lock before writing its own attempt artifacts. Explicit retry MUST check recovery under the same lock before creating state or changing a task.
+
+#### Scenario: All database records are lost
+- **WHEN** raw runs, preflight/batch artifacts, retained worktrees/integration, execution policy/result/stop files or orphaned database sidecars remain without events
+- **THEN** startup and verified audit export block before recreating state or calling a model, including when an empty trace database has been recreated.
+
+#### Scenario: Retry cannot recreate lost state
+- **WHEN** explicit retry encounters orphaned artifacts or unresolved accounting/integration
+- **THEN** it blocks before constructing task state or publishing RETRY and leaves original evidence intact.
+
+#### Scenario: Preflight recovery refusal
+- **WHEN** standalone preflight detects unresolved prior execution or cannot acquire the coordinator lock
+- **THEN** it does not create a new attempt report or call the provider; a fresh authorized preflight creates reports only after recovery admission.
+
+### Requirement: Exclude secret files from audit copies
+Audit export MUST exclude environment files, credential stores and private-key files by a shared case-insensitive path policy before metadata/content access. Verification and restore MUST reject such manifest entries and unmanifested secret files before destination creation. A required evidence reference to an excluded secret file MUST block export rather than omit evidence or rewrite history. File exclusions do not guarantee arbitrary logs are free of sensitive data.
+
+#### Scenario: Generated stack credentials
+- **WHEN** a run contains stack.env alongside valid audit evidence
+- **THEN** export and restore preserve the evidence but do not copy stack.env or its credential bytes, and the source remains unchanged.
+
+#### Scenario: Unsafe existing archive
+- **WHEN** a legacy or altered archive includes an environment/private-key/credential path, including an unlisted file
+- **THEN** verification and restore reject it; re-export from preserved source under the current policy is required, never an edited manifest presented as original evidence.
+
+### Requirement: Reviewed recovery procedure
+The operator runbook MUST define containment, private evidence preservation, task/commit/gate and provider-accounting reconciliation, decision attribution and criteria for a separately authorized retry. Unknown side effects or costs MUST remain blocked. Audit restoration alone MUST NOT clear stops, release leases, declare DONE, enable budgets or authorize execution.
+
+#### Scenario: Merge or billing outcome is uncertain
+- **WHEN** an interrupted attempt has an unresolved integration intent or unknown usage
+- **THEN** the operator records an evidence-backed recovery decision with task/attempt/session and commit references, retains original ledgers and reservations, and requests a reviewed bounded repair before retry; no generic reset or replay is prescribed.
+
 ### Requirement: Separate USD budgets with honest accounting basis
 The coordinator MUST support separate Codex/OpenRouter USD limits while retaining tokens. Estimates MUST use integer microdollars, conservative rounding and pinned model rates. Missing/expired prices and unreconciled unit changes MUST block. Estimates MUST NOT be labelled actual subscription charges or invoices; provider cost stays unknown without qualified observations.
 
