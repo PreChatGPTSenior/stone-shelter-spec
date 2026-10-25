@@ -1,5 +1,19 @@
 # Preparation verification
 
+## Supervised subscription follow-up
+
+Independent `gpt-6.1-sol / high` review found one additional T0010-002 P1 (leaf-first symlink metadata). The `medium` developer reproduced and fixed it; all 38 maintenance tests passed. Independent re-review and coordinator inspection accepted the repair and prior scoped baseline evidence; this is not a new aggregate-suite count or production launch qualification. See [batch progress](../openspec/changes/0010-workflow-assurance/run-progress.md).
+
+## Current coordinator review: T0010-001–003
+
+**111 selected offline tests passed** (37 maintenance/guard plus 74 existing scoped regressions); strict OpenSpec validation passed. See [the review and correction report](../openspec/changes/0010-workflow-assurance/review-001-003.md) for findings, final scoped test evidence and qualification limits. Both production USD limits remain zero. Live CLI and internal dispatch stay code-locked. The added macOS CI job runs the same selected offline modules and retains its log for 14 days; it does not start agents or contact model providers. Local results do not imply that remote CI has passed.
+
+## Scoped offline bootstrap: T0010-001–003 (historical first run)
+
+On the isolated `codex/t0010-001-003-offline` branch, 102 selected offline tests passed: 74 existing history/workflow/budget/supervision/model tests and 28 new maintenance/guard tests. This count is not the historical PR #1 suite. The previously unrun nine T0009-014 history regressions now passed in this scoped run. Both production USD limits remain 0.00 and prices remain empty. No agents, model requests, application stack, recovery apply or publication ran.
+
+See [the detailed bootstrap evidence report](../openspec/changes/0010-workflow-assurance/batch-001-003-report.md) for readiness, exact modules, red/green evidence, the macOS process-inspection constraint and fixture-runner regression. T0010-002 remains pending independent review and live qualification; the maintenance `run` CLI is locked. Earlier historical statements below retain their original scope and dates.
+
 ## Current follow-up: audit loss, secrets and recovery procedure (T0009-014)
 
 Status: **AUTHORED / TESTS NOT_RUN**. The user explicitly prohibits tests, agents and real model requests for this change. No new behavioral qualification or strict OpenSpec validation is claimed. The 102-test results below apply only to the preceding PR #1 revision, now merged as 9dc5cf9.

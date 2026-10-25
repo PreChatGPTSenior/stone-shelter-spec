@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
 from execution.core import Blocked, State, command, json_write, sha, stable
 from execution.budgets import Budgets
 from execution.gates import report
-from execution.history import recovery_status, require_recovered, timeline, verify_evidence
+from execution.history import History, recovery_status, require_recovered, timeline, verify_evidence
 from execution.audit_backup import backup, restore
 from execution.model_policy import load, resolve, ROLES
 import execution.agent_runtime as runtime
@@ -41,6 +41,7 @@ class WorkflowTest(unittest.TestCase):
             path = root / 'execution/prompts' / (role + '.md'); path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Offline fixture role; this prompt is never sent to a model.')
         git(['git', 'add', 'feature.txt', 'execution/prompts']); git(['git', 'commit', '-m', 'fixture seed'])
+        History(root/'.execution/trace.sqlite')
         coordinator = root / '.execution/integration'
         git(['git', 'worktree', 'add', '-b', 'codex/integration', str(coordinator), 'HEAD'])
         task = {'id': 'T0002-002', 'change': '0002-catalog-details', 'title': 'Offline workflow fixture',
@@ -50,7 +51,7 @@ class WorkflowTest(unittest.TestCase):
                 'max_attempts': 1, 'timeout_seconds': 5}
         models = load([task['id']]); receipts = {}
         # Synthetic admission exists ONLY in this isolated test; live preflight is never called.
-        evidence = root / '.execution/fixture-admission.json'; json_write(evidence, {'mode': 'OFFLINE_FIXTURE'})
+        evidence = root / '.execution/model-preflight/fixture-admission.json'; History(root/'.execution/trace.sqlite').write_artifact('model-preflight/fixture-admission.json', {'mode': 'OFFLINE_FIXTURE'})
         import time
         for role in ROLES:
             selection = resolve(models, 'gpt', task['id'], role)
@@ -78,6 +79,11 @@ class WorkflowTest(unittest.TestCase):
                 value = {'status': 'CHANGES_REQUESTED' if rejected else 'APPROVED',
                          'summary': 'Fixture reviewer found missing coverage' if rejected else 'Fixture evidence satisfies assigned contribution',
                          'findings': ['Fixture missing coverage'] if rejected else [], 'evidence': ['R003', 'A01']}
+                if role != 'developer':
+                    contract=json.loads(output.with_name(output.name.replace('.result.json','.input.json')).read_text())['context']['review_contract']
+                    value.update(schema=2,kind='review',**{key:contract[key] for key in
+                        ('task','candidate','attempt','run_id','role','contract_sha256','requirements','acceptance')})
+                    value['evidence']=[{'reference':reference,'sha256':digest} for reference,digest in contract['artifacts'].items()]
                 output.write_text(json.dumps(value))
                 events = [{'type': 'thread.started', 'thread_id': 'fixture-' + role}, {'type': 'turn.started'},
                           {'type': 'item.completed', 'item': {'id': 'tool-1', 'type': 'command_execution',
@@ -97,9 +103,15 @@ class WorkflowTest(unittest.TestCase):
         def fixture_report(stage_name, task, run, candidate, **extra):
             raw = run / (stage_name + '-fixture.json'); json_write(raw, {'mode': 'OFFLINE_FIXTURE'})
             return report(run, stage_name, task, candidate, [raw], **extra)
-        def static(task, tree, run, env, candidate, names): return fixture_report('static', task, run, candidate)
+        def static(task, tree, run, env, candidate, names, *, trusted_root=None, stack=None): return fixture_report('static', task, run, candidate)
         def tests(task, tree, run, env, stack, candidate): return fixture_report('tests', task, run, candidate, tests=1)
-        def browser(task, tree, run, env, stack, candidate): return fixture_report('browser', task, run, candidate, assertions=1)
+        def browser(task, tree, run, env, stack, candidate):
+            from execution.evidence import context, monitor_artifacts, complete_monitor
+            for name in monitor_artifacts('browser'):
+                json_write(run/name, {**context(run,task['id'],candidate),'state':'COMPLETED','checks':[],
+                                      **({'observations':[{'checks':[]}]} if name.endswith('-during.json') else {})})
+            complete_monitor(run,'browser',task,candidate)
+            return fixture_report('browser', task, run, candidate, assertions=1)
 
         with ExitStack() as stack:
             for target, name, value in [(engine, 'ROOT', root), (runtime, 'ROOT', root),
@@ -183,7 +195,7 @@ class WorkflowTest(unittest.TestCase):
             if event['event'] in ('stage.completed', 'gate.completed'):
                 paths.add(Path(event['payload']['artifact']))
                 if event['event'] == 'stage.completed':
-                    paths.update(Path(p) for p in event['payload']['report']['artifact_hashes'])
+                    paths.update(Path(event['payload']['artifact']).parent / p for p in event['payload']['report']['artifact_hashes'])
         for path in sorted(paths):
             with self.subTest(path=path.name):
                 original = path.read_bytes()
@@ -193,7 +205,7 @@ class WorkflowTest(unittest.TestCase):
                 with self.assertRaises(Blocked): verify_evidence(directory)
                 path.write_bytes(original)
         static = next(e for e in events if e['event']=='stage.completed' and e['payload']['stage']=='static')
-        Path(next(iter(static['payload']['report']['artifact_hashes']))).unlink()
+        (Path(static['payload']['artifact']).parent / next(iter(static['payload']['report']['artifact_hashes']))).unlink()
         with self.assertRaises(Blocked): backup(directory, root / 'bad-copy')
         self.assertFalse((root / 'bad-copy').exists())
 
