@@ -16,12 +16,15 @@ def main():
     parser.add_argument('--task')
     parser.add_argument('--destination')
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--require-independent-checkpoint',action='store_true',help='Fail closed unless a separately qualified independent reader is configured; no destination is qualified by this CLI')
     args = parser.parse_args()
     try:
         directory = checked(args.audit_dir)
         if args.action == 'timeline': result = {'events': timeline(directory / 'trace.sqlite', args.task)}
-        elif args.action == 'recovery': result = recovery_status(directory)
-        elif args.action == 'verify-history': result = verify_evidence(directory)
+        elif args.action == 'recovery': result = recovery_status(directory,require_checkpoint=args.require_independent_checkpoint)
+        elif args.action == 'verify-history':
+            result = verify_evidence(directory)
+            if args.require_independent_checkpoint:raise Blocked('Independent checkpoint reader unavailable; external assurance unverifiable')
         elif args.action == 'verify-backup': result = {'status': 'VERIFIED', 'manifest': verify(directory)}
         else:
             if not args.execute or not args.destination: raise Blocked('Copy operations require --execute and a new --destination')

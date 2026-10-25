@@ -51,6 +51,7 @@ from execution.core import State
 from pathlib import Path
 import os,sys
 root=Path(sys.argv[1])
+History(root/'trace.sqlite')
 State(root/'state.sqlite').claim({'id':'T0002-002','depends_on':[],'exclusive_resources':['fixture-resource']},'attempt')
 History(root/'trace.sqlite').append('invocation.started',trace='attempt',task='T0002-002',session='invocation',role='developer')
 os._exit(17)
@@ -79,7 +80,7 @@ os._exit(17)
         raw.write_text(json.dumps(event) + '\n')
         self.journal.append('cli.event', task='T0002-002', session='fixture', payload={
             'raw_artifact': '.execution/runs/attempt/developer.events.jsonl', 'line': 1, 'raw_event_sha256': stable(event)})
-        artifact = self.directory / 'runs/attempt/result.json'; json_write(artifact, {'status': 'fixture'})
+        artifact = self.journal.write_artifact('runs/attempt/result.json', {'status': 'fixture'})
         destination = self.root / 'backup'
         manifest = backup(self.directory, destination)
         restored = self.root / 'restored-audit'; self.assertFalse(restore(destination, restored)['execution_resumed'])
@@ -169,7 +170,9 @@ os._exit(17)
         budget.reserve('probe', selection, self.task['id'], 'developer', 'preflight')
         budget.observe('probe', {'known_input_tokens':2,'known_output_tokens':1,'status':'COMPLETE'}, final=True)
         self.journal.append('invocation.started', session='probe', payload={'kind':'preflight'})
-        receipt = self.directory / 'model-preflight/probe.execution.json'; json_write(receipt, {'artifact_hashes':{}})
+        receipt = self.directory / 'model-preflight/probe.execution.json'; json_write(receipt, {'session':'probe','artifact_hashes':{}})
+        from execution.agent_runtime import append_ledger
+        append_ledger(self.directory/'usage.jsonl',json.loads(receipt.read_text()))
         self.journal.append('invocation.finished', session='probe', payload={
             'receipt':str(receipt),'sha256':sha(receipt)})
         self.assertEqual('NO_UNRESOLVED_EXECUTION', require_recovered(self.directory)['status'])
@@ -214,7 +217,8 @@ os._exit(17)
                     directory = self.root / f'orphan-{index}-{empty_trace}'
                     artifact = directory / name; artifact.parent.mkdir(parents=True)
                     artifact.write_text('fixture')
-                    if empty_trace: History(directory / 'trace.sqlite')
+                    if empty_trace:
+                        with self.assertRaises(Blocked):History(directory / 'trace.sqlite')
                     self.assertEqual('RECOVERY_REQUIRED', recovery_status(directory)['status'])
                     with self.assertRaises(Blocked): require_recovered(directory)
                     with self.assertRaises(Blocked): backup(directory, self.root / f'rejected-{index}-{empty_trace}')
@@ -237,7 +241,7 @@ os._exit(17)
         for name in names:
             path = folder / name; path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('private-fixture')
-        artifact = folder / 'result.json'; json_write(artifact, {'status':'fixture'})
+        artifact = self.journal.write_artifact('runs/attempt/result.json', {'status':'fixture'})
         destination = self.root / 'clean-backup'; manifest = backup(self.directory, destination)
         restored = self.root / 'clean-restore'; restore(destination, restored)
         self.assertEqual(sha(artifact), sha(restored / 'runs/attempt/result.json'))

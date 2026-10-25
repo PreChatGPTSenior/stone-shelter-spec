@@ -289,7 +289,7 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
                   'warnings': warnings + reader_errors, 'event_log': str(log),
                   'stderr_log': str(errors), 'raw_result': str(output)}
         record['artifact_hashes'] = {reference(path): sha(path)
-                                    for path in (input_path, changes_path, log, errors, output) if path.is_file()}
+                                    for path in (input_path, changes_path, log, errors, output)+((result_schema,) if not reviewing else ()) if path.is_file()}
         json_write(receipt, record)
         append_ledger(ROOT / '.execution/usage.jsonl', record)
         decision = None
@@ -385,9 +385,9 @@ def live_preflight(bindings, policy, run_dir, env, budget=None):
             raise Blocked('Codex model catalog is not valid JSON') from error
         vision = selection['requires_image_input']
         capability = catalog_admission(catalog, selection, vision)
-        json_write(folder / 'catalog-admission.json', capability)
+        History(ROOT/'.execution/trace.sqlite').write_artifact(str((folder/'catalog-admission.json').relative_to(ROOT/'.execution')),capability)
         nonce = uuid.uuid4().hex
-        (folder / 'probe.txt').write_text(nonce + '\n')
+        History(ROOT/'.execution/trace.sqlite').write_artifact(str((folder/'probe.txt').relative_to(ROOT/'.execution')),(nonce+'\n').encode())
         prompt = ('Compatibility probe only. Read ONLY probe.txt in the current directory using '
                   'one shell command. Do not edit files, inspect other paths, use network tools or '
                   'delegate. Return the required JSON schema: status APPROVED, summary '

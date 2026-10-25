@@ -43,7 +43,7 @@ SOURCES = (
     'tools/execution/core.py', 'tools/execution/history.py', 'tools/execution/budgets.py',
     'tools/execution/money.py', 'tools/execution/audit_paths.py', 'tools/execution/supervision.py',
     'tools/execution/evidence.py', 'tools/execution/check_selection.py',
-    'templates/agent-result.schema.json',
+    'templates/agent-result.schema.json', 'tools/execution/checkpoints.py',
 )
 READINESS_TTL_SECONDS = 300
 # No CLI flag, environment setting or caller argument may enable live dispatch.
@@ -265,7 +265,7 @@ def dispatch_role(packet, role, workspace, folder, *, root=None, readiness=None,
     if role == 'code_review':
         from execution.evidence import contract_from_artifacts
         inputs = folder / 'review-inputs'; inputs.mkdir(mode=0o700)
-        json_write(inputs / 'packet.json', packet)
+        History(root/'.execution/trace.sqlite').write_artifact(str((inputs/'packet.json').relative_to(root/'.execution')),packet,trace=attempt_id,task=packet['task_id'])
         artifacts = {'review-inputs/packet.json': sha(inputs / 'packet.json')}
         sources = [(f'.execution/runs/{attempt_id}/developer/handoff.json', stable(previous), 'handoff.json'),
                    (previous['receipt'], previous['receipt_sha256'], 'developer-receipt.json')]
@@ -276,7 +276,8 @@ def dispatch_role(packet, role, workspace, folder, *, root=None, readiness=None,
             if name == 'handoff.json':
                 if stable(json_read(source)) != digest: raise Blocked('Developer handoff changed')
             elif sha(source) != digest: raise Blocked('Required reviewer input changed')
-            target = inputs / name; target.write_bytes(source.read_bytes())
+            target = inputs / name
+            History(root/'.execution/trace.sqlite').write_artifact(str(target.relative_to(root/'.execution')),source.read_bytes(),trace=attempt_id,task=packet['task_id'])
             if (stable(json_read(target)) if name == 'handoff.json' else sha(target)) != digest:
                 raise Blocked('Required reviewer input changed while retaining it')
             artifacts['review-inputs/' + name] = sha(target)

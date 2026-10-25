@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).absolute().parents[1]))
 from execution.core import Blocked, State, command, json_write, sha, stable
 from execution.budgets import Budgets
 from execution.gates import report
-from execution.history import recovery_status, require_recovered, timeline, verify_evidence
+from execution.history import History, recovery_status, require_recovered, timeline, verify_evidence
 from execution.audit_backup import backup, restore
 from execution.model_policy import load, resolve, ROLES
 import execution.agent_runtime as runtime
@@ -41,6 +41,7 @@ class WorkflowTest(unittest.TestCase):
             path = root / 'execution/prompts' / (role + '.md'); path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Offline fixture role; this prompt is never sent to a model.')
         git(['git', 'add', 'feature.txt', 'execution/prompts']); git(['git', 'commit', '-m', 'fixture seed'])
+        History(root/'.execution/trace.sqlite')
         coordinator = root / '.execution/integration'
         git(['git', 'worktree', 'add', '-b', 'codex/integration', str(coordinator), 'HEAD'])
         task = {'id': 'T0002-002', 'change': '0002-catalog-details', 'title': 'Offline workflow fixture',
@@ -50,7 +51,7 @@ class WorkflowTest(unittest.TestCase):
                 'max_attempts': 1, 'timeout_seconds': 5}
         models = load([task['id']]); receipts = {}
         # Synthetic admission exists ONLY in this isolated test; live preflight is never called.
-        evidence = root / '.execution/fixture-admission.json'; json_write(evidence, {'mode': 'OFFLINE_FIXTURE'})
+        evidence = root / '.execution/model-preflight/fixture-admission.json'; History(root/'.execution/trace.sqlite').write_artifact('model-preflight/fixture-admission.json', {'mode': 'OFFLINE_FIXTURE'})
         import time
         for role in ROLES:
             selection = resolve(models, 'gpt', task['id'], role)

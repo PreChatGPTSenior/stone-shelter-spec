@@ -38,7 +38,7 @@ class MaintenanceTest(unittest.TestCase):
                      'tools/execution/core.py', 'tools/execution/history.py', 'tools/execution/budgets.py',
                      'tools/execution/money.py', 'tools/execution/audit_paths.py', 'tools/execution/supervision.py',
                      'tools/execution/evidence.py', 'tools/execution/check_selection.py',
-                     'templates/agent-result.schema.json'):
+                     'templates/agent-result.schema.json', 'tools/execution/checkpoints.py'):
             path = self.root / name; path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((ROOT / name).read_bytes())
         json_write(self.root / 'execution/agent-budgets.json', TOKEN_POLICY)
@@ -55,6 +55,7 @@ class MaintenanceTest(unittest.TestCase):
         return maintenance.plan('T0010-002', root=self.root)
 
     def context(self, packet):
+        journal=History(self.root / '.execution/trace.sqlite')
         (self.workspace / 'tools').mkdir(parents=True, exist_ok=True)
         if not (self.workspace / 'tools/maintenance.py').exists():
             (self.workspace / 'tools/maintenance.py').write_text('original fixture\n')
@@ -62,10 +63,11 @@ class MaintenanceTest(unittest.TestCase):
                          json.loads((self.root / 'execution/agent-budgets.json').read_text()))
         policy = json.loads((self.root / 'execution/agent-models.json').read_text())
         receipts = {}
+        journal=History(self.root / '.execution/trace.sqlite')
         for role in ('developer', 'code_review'):
             selection = resolve(policy, 'gpt', packet['task_id'], role)
             artifact = self.root / '.execution/model-preflight' / (role + '.json')
-            json_write(artifact, {'fixture_only': True, 'role': role})
+            journal.write_artifact('model-preflight/'+role+'.json', {'fixture_only': True, 'role': role})
             receipts[role] = {'status': 'PASS', 'selection_sha256': selection['selection_sha256'],
                               'policy_sha256': stable(policy), 'checked_at_epoch': time.time(),
                               'artifact': str(artifact), 'sha256': sha(artifact)}
@@ -112,7 +114,7 @@ class MaintenanceTest(unittest.TestCase):
 
     def checks(self):
         artifact = self.root / '.execution/runs/maintenance-fixture/checks.txt'
-        artifact.parent.mkdir(parents=True, exist_ok=True); artifact.write_text('offline fixture checks')
+        History(self.root/'.execution/trace.sqlite').write_artifact('runs/maintenance-fixture/checks.txt',b'offline fixture checks')
         return {'status': 'PASS', 'candidate': identity(self.workspace),
                 'artifact_hashes': {str(artifact.relative_to(self.root)): sha(artifact)}}
 
@@ -142,7 +144,7 @@ class MaintenanceTest(unittest.TestCase):
                      'execution/runtime-lock.json', 'execution/agent-budgets.json',
                      'tools/execution/agent_runtime.py', 'templates/maintenance-task.schema.json',
                      'tools/execution/evidence.py', 'tools/execution/check_selection.py',
-                     'templates/agent-result.schema.json'):
+                     'templates/agent-result.schema.json', 'tools/execution/checkpoints.py'):
             packet = self.packet(); path = self.root / name; before = path.read_bytes()
             path.write_bytes(before + b'\n')
             with self.subTest(name=name), self.assertRaises(Blocked):

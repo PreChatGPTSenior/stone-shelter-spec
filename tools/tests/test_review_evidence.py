@@ -119,10 +119,10 @@ class ReviewEvidenceTest(unittest.TestCase):
         from execution.model_policy import load,resolve
         from execution.core import tasks
         from execution.agent_runtime import Usage
-        directory=self.run/'journal'/'.execution';run=directory/'runs'/'owner-A'/'attempt-1'/'candidate';run.mkdir(parents=True)
+        directory=self.run/'journal'/'.execution';History(directory/'trace.sqlite');run=directory/'runs'/'owner-A'/'attempt-1'/'candidate';run.mkdir(parents=True)
         artifacts={}
         for name in ['first.json','second.json']:
-            json_write(run/name,{'status':'PASS'});artifacts[name]=sha(run/name)
+            History(directory/'trace.sqlite').write_artifact(str((run/name).relative_to(directory)),{'status':'PASS'});artifacts[name]=sha(run/name)
         body={**{k:v for k,v in self.contract.items() if k!='contract_sha256'},'artifacts':artifacts}
         contract={**body,'contract_sha256':stable(body)}
         result=deepcopy(self.result);result['contract_sha256']=contract['contract_sha256'];result['evidence']=[{'reference':n,'sha256':h} for n,h in artifacts.items()]
@@ -135,6 +135,7 @@ class ReviewEvidenceTest(unittest.TestCase):
         raw_result=run/'code_review-reviewer.result.json';json_write(raw_result,result)
         receipt['raw_result']=str(raw_result);receipt['artifact_hashes'][str(raw_result)]=sha(raw_result)
         receipt_path=run/'code_review-reviewer.execution.json';json_write(receipt_path,receipt)
+        from execution.agent_runtime import append_ledger
         output=run/'review-output.json';json_write(output,{'agent_result':result,'execution':{**receipt,'selection':{},'budget':{},'elapsed_seconds':1}})
         report=gates.reviewed_report(run,'code_review',self.task,'candidate',output,'reviewer',contract,deepcopy(result))
         if weaken:
@@ -152,6 +153,7 @@ class ReviewEvidenceTest(unittest.TestCase):
         budget=Budgets(directory/'budgets.sqlite',{'schema':1,'unit':'input_plus_output_tokens','pools':{name:{'limit_tokens':1000,'invocation_allowance_tokens':100} for name in ('codex','openrouter')}})
         selection=resolve(load([t['id'] for t in tasks()]),'gpt',self.task['id'],'code_review')
         budget.reserve('reviewer',selection,self.task['id'],'code_review','agent');budget.observe('reviewer',metrics,final=True)
+        append_ledger(directory/'usage.jsonl',receipt)
         history=History(directory/'trace.sqlite')
         history.append('task.claimed',trace='owner-A',task=self.task['id'],payload={'owner':'owner-A','packet':self.task})
         history.append('cycle.started',trace='owner-A',task=self.task['id'],payload={'cycle':'runs/owner-A/attempt-1/candidate','candidate':'candidate'})

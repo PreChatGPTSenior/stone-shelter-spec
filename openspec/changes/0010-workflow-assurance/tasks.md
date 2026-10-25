@@ -39,7 +39,7 @@ For bootstrap only, acceptance of 001 means readiness for its explicitly authori
 - [x] T0010-004 — P1 candidate/configuration bypass closed; 30 guarded offline tests, independent review and coordinator acceptance.
 - [x] T0010-005 — Environment evidence and resource-set gaps closed; 28 guarded offline tests, independent review and coordinator acceptance.
 - [x] T0010-006 — P1 empty/invalid reviewer approval rejected.
-- [ ] T0010-007 — P1 partial rollback/orphan-history gap closed; external trust boundary explicit.
+- [x] T0010-007 — WA-008 offline reconciliation accepted after independent review and coordinator verification; 22 focused and 6 compatibility cases pass; external checkpoint destination remains unqualified.
 - [ ] T0010-008 — Common subprocess supervisor qualified.
 - [ ] T0010-009 — P2 unsupervised execution sites migrated.
 - [ ] T0010-010 — P2 baseline-only requirement coverage replaced.

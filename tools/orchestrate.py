@@ -20,6 +20,9 @@ MODEL_RECEIPTS={}
 MODEL_ENV=None
 BUDGET=None
 
+def registered_write(path,value):
+ return History(ROOT/'.execution/trace.sqlite').write_artifact(str(Path(path).relative_to(ROOT/'.execution')),value)
+
 def audit(event,task,run,payload):
  parts=Path(run).relative_to(ROOT/'.execution/runs').parts
  return History(ROOT/'.execution/trace.sqlite').append(event,trace=parts[0],task=task['id'],payload={**payload,'batch_id':getattr(LOCAL,'batch_id',None)})
@@ -77,7 +80,7 @@ def actor(role,task,tree,run,context):
   if not hasattr(LOCAL,'review_results'):LOCAL.review_results={}
   LOCAL.review_results[session]=deepcopy(result)
  output=run/(role+'-'+session+'.json')
- json_write(output,{'agent_result':result,'execution':json_read(execution),'model_preflight':admission})
+ (registered_write if role=='developer' else json_write)(output,{'agent_result':result,'execution':json_read(execution),'model_preflight':admission})
  return output,session
 
 def agent_report(run,role,task,candidate,out,who):
@@ -142,7 +145,7 @@ def work(task,state,coordinator,env):
   base=command(['git','rev-parse','HEAD'],cwd=coordinator).strip()
   if task['kind']=='readiness':
    checks=toolchain(env)
-   p=run/'readiness.json';json_write(p,{'status':'READY','covered_task_ids':[task['id']],'checks':checks,'meaning':'Feature prerequisite checked; each actual frontier is rechecked as a whole before developers run'})
+   p=run/'readiness.json';registered_write(p,{'status':'READY','covered_task_ids':[task['id']],'checks':checks,'meaning':'Feature prerequisite checked; each actual frontier is rechecked as a whole before developers run'})
    arrive(task,json_read(p))
    with BUDGET.finalization() if BUDGET else contextlib.nullcontext():
     state.set(task['id'],'DONE',owner,base)
@@ -155,7 +158,7 @@ def work(task,state,coordinator,env):
   # Required prerequisites are checked before application edits.
   if 'docker' in task['environment']:start(stack,identity(tree),env=env)
   checks=probe(stack,task,env,include_tools=True,candidate_root=tree)
-  json_write(run/'pre-implementation.json',{'covered_task_ids':[task['id']],'status':'READY','checks':checks})
+  registered_write(run/'pre-implementation.json',{'covered_task_ids':[task['id']],'status':'READY','checks':checks})
   state.set(task['id'],'DEVELOPING',owner,base)
   arrive(task,json_read(run/'pre-implementation.json'))
   feedback=None
@@ -168,7 +171,7 @@ def work(task,state,coordinator,env):
    except Blocked as failure:
     if attempt+1>=task['max_attempts']:raise
     feedback={'reason':str(failure),'evidence_directory':str(attempt_run),'instruction':'Diagnose the recorded failure before changing code; never repeat unchanged checks or widen scope'}
-    json_write(attempt_run/'failure.json',feedback)
+    registered_write(attempt_run/'failure.json',feedback)
   names=changed(tree,base)
   budget_guard()
   if names:
@@ -213,6 +216,7 @@ def run(selected,workers,preset=None):
  MODEL_POLICY=load_models([t['id'] for t in tasks()]);MODEL_PRESET=preset or MODEL_POLICY['default_preset']
  BUDGET=Budgets(ROOT/'.execution/budgets.sqlite',load_budgets(),BUDGET_POLICY_PATH)
  budget_guard(model_selections(MODEL_POLICY,MODEL_PRESET,selected))
+ History(ROOT/'.execution/trace.sqlite')
  state=State(ROOT/'.execution/state.sqlite');coordinator=ROOT/'.execution/integration'
  if not coordinator.exists():command(['git','worktree','add','-b','codex/integration',str(coordinator),'HEAD'],timeout=60)
  dirty=command(['git','status','--porcelain','--','.',':(exclude)engineering-log',':(exclude)**/engineering-log/**'],cwd=coordinator).strip()
@@ -222,26 +226,26 @@ def run(selected,workers,preset=None):
    command(['git','merge-base','--is-ancestor',value['commit'],'HEAD'],cwd=coordinator)
  policy=ROOT/'.execution/policy.json';fingerprint=identity(ROOT)
  if policy.exists() and json_read(policy)['fingerprint']!=fingerprint:raise Blocked('Execution package changed; prior state needs explicit requalification')
- if not policy.exists():json_write(policy,{'fingerprint':fingerprint})
+ if not policy.exists():registered_write(policy,{'fingerprint':fingerprint})
  # Validate package before trusting executable selectors.
  command([sys.executable,str(ROOT/'tools/validate_execution.py')])
  bindings=model_selections(MODEL_POLICY,MODEL_PRESET,[t for t in selected if state.status().get(t['id'],{}).get('status')!='DONE'])
  model_run=ROOT/'.execution/model-preflight'/uuid.uuid4().hex
  model_report={'status':'CHECKING','bindings':bindings,'policy_sha256':stable(MODEL_POLICY)}
- json_write(model_run/'batch.json',model_report)
+ registered_write(model_run/'batch.json',model_report)
  try:
   MODEL_RECEIPTS=live_preflight(bindings,MODEL_POLICY,model_run,env,budget=BUDGET) if bindings else {}
  except BaseException:
-  json_write(model_run/'batch.json',{**model_report,'status':'BLOCKED','reason':'Model compatibility check failed; inspect private invocation receipts'})
+  registered_write(model_run/'batch.json',{**model_report,'status':'BLOCKED','reason':'Model compatibility check failed; inspect private invocation receipts'})
   raise
- json_write(model_run/'batch.json',{**model_report,'status':'PASS','receipts':MODEL_RECEIPTS})
+ registered_write(model_run/'batch.json',{**model_report,'status':'PASS','receipts':MODEL_RECEIPTS})
  active={};failed=False
  with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
   while True:
    try:budget_guard()
    except Blocked as error:
     failed=True
-    json_write(ROOT/'.execution/budget-stop.json',{'status':'BUDGET_STOPPED','reason':str(error),'observed_at_epoch':time.time()})
+    registered_write(ROOT/'.execution/budget-stop.json',{'status':'BUDGET_STOPPED','reason':str(error),'observed_at_epoch':time.time()})
    statuses=state.status();done={k for k,v in statuses.items() if v['status']=='DONE'}
    if all(t['id'] in done for t in selected):break
    if not failed:
@@ -261,12 +265,12 @@ def run(selected,workers,preset=None):
      if expired:MODEL_RECEIPTS.update(live_preflight(expired,MODEL_POLICY,ROOT/'.execution/model-preflight'/uuid.uuid4().hex,env,budget=BUDGET))
      # The entire selected frontier is the batch. Dependencies are already integrated;
      # every worker completes its read-only preflight before entering the shared start barrier.
-     batchid=uuid.uuid4().hex;json_write(ROOT/'.execution/batches'/f'{batchid}.json',{'status':'CHECKING','task_ids':[t['id'] for t in frontier],'rule':'All prerequisites must pass before the batch begins'})
+     batchid=uuid.uuid4().hex;registered_write(ROOT/'.execution/batches'/f'{batchid}.json',{'status':'CHECKING','task_ids':[t['id'] for t in frontier],'rule':'All prerequisites must pass before the batch begins'})
      # Initial tools/resources are checked for all tickets. Per-stack checks are enforced by worker barriers below.
      receipts={}
      def ready_batch(batch=batchid,received=receipts,ids=[t['id'] for t in frontier]):
       if set(received)!=set(ids):raise Blocked('Incomplete batch readiness')
-      json_write(ROOT/'.execution/batches'/f'{batch}.json',{'status':'READY','task_ids':ids,'receipts':received})
+      registered_write(ROOT/'.execution/batches'/f'{batch}.json',{'status':'READY','task_ids':ids,'receipts':received})
       History(ROOT/'.execution/trace.sqlite').append('batch.ready',trace=batch,payload={'task_ids':ids,'receipts':received})
       print(json.dumps({'batch':batch,'task_ids':ids,'readiness':'READY'}),flush=True)
      barrier=threading.Barrier(len(frontier),action=ready_batch)
@@ -278,7 +282,7 @@ def run(selected,workers,preset=None):
     task=active.pop(f)
     try:f.result();print(json.dumps({'task':task['id'],'status':'DONE'}),flush=True)
     except BaseException as e:failed=True;print(json.dumps({'task':task['id'],'status':'BLOCKED','reason':str(e)[:500]}),flush=True)
- statuses=state.status();json_write(ROOT/'.execution/result.json',statuses)
+ statuses=state.status();registered_write(ROOT/'.execution/result.json',statuses)
  return 0 if not failed and all(statuses.get(t['id'],{}).get('status')=='DONE' for t in selected) else 2
 
 # Each frontier has a fresh whole-batch readiness barrier before any edits.
@@ -310,13 +314,13 @@ def main():
    with (ROOT/'.execution/coordinator.lock').open('a') as lock:
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     require_recovered(ROOT/'.execution')
-    json_write(target/'batch.json',{'status':'CHECKING','bindings':bindings})
+    registered_write(target/'batch.json',{'status':'CHECKING','bindings':bindings})
     try:
      budget=Budgets(ROOT/'.execution/budgets.sqlite',load_budgets(),BUDGET_POLICY_PATH)
      receipts=live_preflight(bindings,policy,target,dict(os.environ),budget=budget) if bindings else {}
     except BaseException:
-     json_write(target/'batch.json',{'status':'BLOCKED','bindings':bindings});raise
-    json_write(target/'batch.json',{'status':'PASS','bindings':bindings,'receipts':receipts})
+     registered_write(target/'batch.json',{'status':'BLOCKED','bindings':bindings});raise
+    registered_write(target/'batch.json',{'status':'PASS','bindings':bindings,'receipts':receipts})
    print(json.dumps({'status':'PASS','report':str(target/'batch.json'),'implementation_agents_started':False}));return 0
   if args.action=='usage':print(json.dumps(usage_totals(ROOT/'.execution/usage.jsonl'),indent=2));return 0
   if args.action=='budgets':print(json.dumps(budget_snapshot(ROOT/'.execution/budgets.sqlite',load_budgets()),indent=2));return 0
