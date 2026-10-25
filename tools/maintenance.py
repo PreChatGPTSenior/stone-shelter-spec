@@ -53,7 +53,7 @@ def _root(root):
     path = Path(ROOT if root is None else root).absolute()
     if '..' in path.parts or any(part.lower() == 'engineering-log' for part in path.parts):
         raise Blocked('Protected/unbounded maintenance root')
-    for parent in (path, *path.parents):
+    for parent in (*reversed(path.parents), path):
         if parent.is_symlink():
             raise Blocked('Symlink maintenance root')
     return path

@@ -2,7 +2,7 @@
 
 Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
 
-T0010-001 has completed its authorized offline readiness; T0010-002 and T0010-003 are authored/offline-verified with independent review pending. T0010-004 onward remain **PLANNED / NOT STARTED**. See [the observed batch report](batch-001-003-report.md) and [coordinator review corrections](review-001-003.md). Their existence does not authorize further execution. T0010-001 is first and must cover the whole explicitly requested batch. IDs are maintenance IDs, separate from `execution/tasks.json` application delivery records.
+T0010-001 has completed its authorized offline readiness; T0010-002 and T0010-003 have independent offline bootstrap approval and coordinator acceptance; production dispatch remains locked. T0010-004 onward remain **PLANNED / NOT STARTED**. See [the observed batch report](batch-001-003-report.md) and [coordinator review corrections](review-001-003.md). Their existence does not authorize further execution. T0010-001 is first and must cover the whole explicitly requested batch. IDs are maintenance IDs, separate from `execution/tasks.json` application delivery records.
 
 | Task | Work | Depends on | Requirement |
 |---|---|---|---|
@@ -34,7 +34,7 @@ For bootstrap only, acceptance of 001 means readiness for its explicitly authori
 ## Execution checklist
 
 - [x] T0010-001 — Offline readiness for 001–003 recorded; paid workers remain blocked and future readiness must be refreshed.
-- [ ] T0010-002 — Implementation and offline tests passed; independent qualification pending; live CLI and internal API locked.
+- [x] T0010-002 — Offline bootstrap independently reviewed; P1 ancestor-order repair and 38 focused tests accepted; production CLI/API remain locked.
 - [ ] T0010-003 — Historical tests and new regressions passed offline; independent evidence review pending.
 - [ ] T0010-004 — P1 candidate/configuration bypass closed.
 - [ ] T0010-005 — P2 environment evidence and resource-set gaps closed.

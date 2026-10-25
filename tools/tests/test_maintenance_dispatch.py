@@ -148,6 +148,22 @@ class MaintenanceTest(unittest.TestCase):
         path.symlink_to(self.root / 'execution/agent-models.json')
         with self.assertRaises(Blocked): self.packet()
 
+    def test_symlink_ancestor_rejected_before_descendant_metadata(self):
+        root = Path('/synthetic-review-fixture/alias/child')
+        alias = root.parent
+        checked = []
+
+        def is_symlink(path):
+            if alias in path.parents:
+                self.fail('Descendant metadata queried before rejecting symlink ancestor')
+            checked.append(path)
+            return path == alias
+
+        with patch.object(Path, 'is_symlink', autospec=True, side_effect=is_symlink):
+            with self.assertRaisesRegex(Blocked, 'Symlink maintenance root'):
+                maintenance._root(root)
+        self.assertEqual([Path('/'), Path('/synthetic-review-fixture'), alias], checked)
+
     def test_model_effort_or_provider_substitution_rejected(self):
         path = self.root / 'execution/agent-models.json'
         original = json.loads(path.read_text())
