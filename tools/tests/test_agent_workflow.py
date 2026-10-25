@@ -97,7 +97,7 @@ class WorkflowTest(unittest.TestCase):
         def fixture_report(stage_name, task, run, candidate, **extra):
             raw = run / (stage_name + '-fixture.json'); json_write(raw, {'mode': 'OFFLINE_FIXTURE'})
             return report(run, stage_name, task, candidate, [raw], **extra)
-        def static(task, tree, run, env, candidate, names): return fixture_report('static', task, run, candidate)
+        def static(task, tree, run, env, candidate, names, *, trusted_root=None, stack=None): return fixture_report('static', task, run, candidate)
         def tests(task, tree, run, env, stack, candidate): return fixture_report('tests', task, run, candidate, tests=1)
         def browser(task, tree, run, env, stack, candidate): return fixture_report('browser', task, run, candidate, assertions=1)
 

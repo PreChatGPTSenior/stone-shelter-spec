@@ -91,12 +91,12 @@ def cycle(task,tree,run,env,stack,base):
 def verify_cycle(task,tree,run,env,stack,base):
  budget_guard()
  run.mkdir(parents=True,exist_ok=True);candidate=identity(tree)
- if 'docker' in task['environment']:start(stack,candidate)
- checks=probe(stack,task,env,include_tools=True)
+ if 'docker' in task['environment']:start(stack,candidate,env=env)
+ checks=probe(stack,task,env,include_tools=True,candidate_root=tree)
  p=run/'environment-raw.json';json_write(p,{'covered_task_ids':[task['id']],'candidate':candidate,'checks':checks,'status':'READY'})
  reports={'environment':stage(run,task,'environment',report(run,'environment',task,candidate,[p]))}
  names=changed(tree,base);check_scope(task,names)
- reports['static']=stage(run,task,'static',static_gate(task,tree,run,env,candidate,names))
+ reports['static']=stage(run,task,'static',static_gate(task,tree,run,env,candidate,names,trusted_root=ROOT,stack=stack))
  context={'candidate':candidate,'base_commit':base,'changed_files':names,'reports':reports,'run_directory':str(run),'review_scope':'ticket deliverables; acceptance IDs are contributions, whole scenarios are release-qualified'}
  out,who=actor('code_review',task,tree,run,context)
  reports['code_review']=agent_report(run,'code_review',task,candidate,out,who)
@@ -134,14 +134,14 @@ def work(task,state,coordinator,env):
   stack=configure(tree,run,owner,env)
   prepare_dependencies(tree,env)
   # Required prerequisites are checked before application edits.
-  if 'docker' in task['environment']:start(stack,identity(tree))
-  checks=probe(stack,task,env,include_tools=True)
+  if 'docker' in task['environment']:start(stack,identity(tree),env=env)
+  checks=probe(stack,task,env,include_tools=True,candidate_root=tree)
   json_write(run/'pre-implementation.json',{'covered_task_ids':[task['id']],'status':'READY','checks':checks})
   state.set(task['id'],'DEVELOPING',owner,base)
   arrive(task,json_read(run/'pre-implementation.json'))
   feedback=None
   for attempt in range(task['max_attempts']):
-   probe(stack,task,env,include_tools=True)
+   probe(stack,task,env,include_tools=True,candidate_root=tree)
    attempt_run=run/('attempt-'+str(attempt+1));attempt_run.mkdir()
    out,_=actor('developer',task,tree,attempt_run,{'base_commit':base,'run_directory':str(run),'readiness':str(run/'pre-implementation.json'),'stack_urls':{k:stack[k] for k in ['api','ui']},'output_test_path':'quality/e2e/'+task['id']+'/*.spec.ts','previous_failure':feedback})
    check_scope(task,changed(tree,base))

@@ -3,7 +3,8 @@ from __future__ import annotations
 import json,os,signal,subprocess,sys,time,xml.etree.ElementTree as ET
 from pathlib import Path
 from .core import ROOT,Blocked,identity,json_read,json_write,sha,command
-from .environment import probe,runtime_env
+from .environment import probe,runtime_env,toolchain
+from .check_selection import select_checks
 from .test_environment import handshake
 sys.path.insert(0,str(ROOT/'tools'))
 import static_analysis
@@ -77,11 +78,30 @@ def junit(path):
  if counts['tests']<1 or any(counts[k] for k in ['failures','errors','skipped']):raise Blocked('Empty, failed or skipped test result')
  return counts['tests']
 
-def static_gate(task,tree,run,env,candidate,changed):
- release=any(c['adapter']=='release' for c in task['checks'])
- java=release or any(n.startswith('stone-shelter-api/') and n.endswith('.java') for n in changed)
- react=release or any(n.startswith('stone-shelter-ui/') and n.endswith(('.ts','.tsx','.js','.jsx')) for n in changed)
- raw=[]
+def static_gate(task,tree,run,env,candidate,changed,*,trusted_root=ROOT,stack=None):
+ plan=select_checks(tree,candidate,changed,trusted_root=trusted_root,release=any(c['adapter']=='release' for c in task['checks']))
+ checks=set(plan['checks']);plan_path=run/'check-plan.json';json_write(plan_path,plan)
+ java='java' in checks;react='react' in checks
+ raw=[plan_path]
+ def configuration_check(label,argv,cwd):
+  result=subprocess.run(argv,cwd=cwd,env=env,capture_output=True,text=True,timeout=300)
+  log=run/(label+'.log');log.write_text(result.stdout+result.stderr);raw.append(log)
+  if result.returncode:raise Blocked('Candidate configuration check failed: '+label)
+ if 'runtime' in checks:
+  p=run/'candidate-toolchain.json';json_write(p,toolchain(env,candidate_root=tree));raw.append(p)
+ if 'package' in checks:
+  configuration_check('candidate-package',[sys.executable,str(trusted_root/'tools/validate_execution.py'),'--candidate-root',str(tree),'--candidate',candidate],trusted_root)
+ if 'maven' in checks:
+  configuration_check('candidate-maven',[str(trusted_root/'stone-shelter-api/mvnw'),'-B','-f',str(tree/'stone-shelter-api/pom.xml'),'validate'],tree/'stone-shelter-api')
+ if 'frontend' in checks:
+  configuration_check('candidate-dependencies',['npm','ci','--ignore-scripts','--no-audit','--no-fund'],tree/'stone-shelter-ui')
+ if 'dependencies' in checks:
+  configuration_check('candidate-package-lock',['npm','ci','--ignore-scripts','--no-audit','--no-fund'],tree)
+ if 'compose' in checks:
+  if not stack or Path(stack['worktree'])!=tree:raise Blocked('Candidate container checks require the admitted candidate stack')
+  from .environment import compose
+  p=run/'candidate-compose.log';p.write_text(compose(stack,'config','--quiet',env=env));raw.append(p)
+  p=run/'candidate-container-build.log';p.write_text(compose(stack,'--profile','frontend','build',env=env));raw.append(p)
  feature=int(task['id'][1:5]);number=int(task['id'][-3:])
  ai_stage='rag' if feature>=7 or (feature==6 and number>=5) else 'chat' if feature==6 and number>=2 else 'embedding' if feature>=5 and task['kind']!='readiness' else None
  if ai_stage:
@@ -99,18 +119,18 @@ def static_gate(task,tree,run,env,candidate,changed):
    r=subprocess.run(argv,cwd=tree/'stone-shelter-ui',env=env,capture_output=True,text=True,timeout=300)
    log=run/(label+'.log');log.write_text(r.stdout+r.stderr);raw.append(log)
    if r.returncode:raise Blocked('Frontend '+label+' failed')
- if not raw:
-  p=run/'static-scope.json';json_write(p,{'status':'PASS','reason':'No Java/React source changed; policy, package and scope validation remain required','changed':changed});raw=[p]
+ if not checks and len(raw)==1:
+  p=run/'static-scope.json';json_write(p,{'status':'PASS','reason':'No mapped executable input changed; candidate-bound documentation scope only','changed':changed});raw.append(p)
  if identity(tree)!=candidate:raise Blocked('Source changed during static checks')
  return report(run,'static',task,candidate,raw)
 
 def selected_tests(task,tree,run,env,stack,candidate):
- raw=[];total=0
+ raw=[];total=0;package_checks=0
  for i,check in enumerate(task['checks']):
   adapter=check['adapter'];selector=check['selector'];name='test-'+str(i)
   if adapter=='package':
-   log=monitored([sys.executable,str(ROOT/'tools/validate_execution.py')],ROOT,env,stack,task,run,name)
-   raw.append(log);total+=1
+   log=monitored([sys.executable,str(ROOT/'tools/validate_execution.py'),'--candidate-root',str(tree),'--candidate',candidate],ROOT,env,stack,task,run,name)
+   raw.append(log);package_checks+=1
   elif adapter=='maven':
    paths=list((tree/'stone-shelter-api/src/test/java').rglob(selector+'.java'))
    if not paths:raise Blocked('Required test class not implemented: '+selector)
@@ -155,7 +175,7 @@ def selected_tests(task,tree,run,env,stack,candidate):
   else:raise Blocked('Unknown test adapter')
  if not raw:raise Blocked('No selected verification')
  if identity(tree)!=candidate:raise Blocked('Source changed during tests')
- return report(run,'tests',task,candidate,raw,tests=total)
+ return report(run,'tests',task,candidate,raw,tests=total,package_checks=package_checks)
 
 def browser(task,tree,run,env,stack,candidate):
  if not task['browser_required']:

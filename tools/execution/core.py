@@ -132,5 +132,13 @@ def decide_gate(task,candidate,reports):
  actors=[reports[x].get('actor') for x in ['code_review','test_engineer','test_review','browser_planner','browser_review']]
  if not all(actors) or len(actors)!=len(set(actors)):raise Blocked('Review roles must be separate sessions')
  if task['browser_required'] and reports['browser'].get('assertions',0)<1:raise Blocked('No actual browser assertions')
- if task['checks'] and reports['tests'].get('tests',0)<1:raise Blocked('No observed test results')
+ if task['checks'] and reports['tests'].get('tests',0)<1:
+  package_preparation=(task.get('kind')=='preparation' and task.get('browser_required') is False
+   and all(check.get('adapter')=='package' for check in task['checks'])
+   and isinstance(task.get('browser_policy'),str) and bool(task['browser_policy'].strip())
+   and reports['browser'].get('not_applicable_reason')==task['browser_policy']
+   and reports['browser'].get('assertions')==0
+   and type(reports['tests'].get('package_checks')) is int
+   and reports['tests']['package_checks']==len(task['checks']))
+  if not package_preparation:raise Blocked('No observed test results or qualified preparation package proof')
  return {'status':'READY_TO_INTEGRATE','candidate':candidate,'task':task['id']}

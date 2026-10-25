@@ -2,7 +2,7 @@
 
 Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
 
-T0010-001 has completed its authorized offline readiness; T0010-002 and T0010-003 have independent offline bootstrap approval and coordinator acceptance; production dispatch remains locked. T0010-004 onward remain **PLANNED / NOT STARTED**. See [the observed batch report](batch-001-003-report.md) and [coordinator review corrections](review-001-003.md). Their existence does not authorize further execution. T0010-001 is first and must cover the whole explicitly requested batch. IDs are maintenance IDs, separate from `execution/tasks.json` application delivery records.
+T0010-001 has completed its authorized offline readiness; T0010-002 and T0010-003 have independent offline bootstrap approval and coordinator acceptance; production dispatch remains locked. T0010-004 is independently reviewed and coordinator-accepted for scoped offline behavior; T0010-005 onward remain **PLANNED / NOT STARTED**. See [the observed batch report](batch-001-003-report.md) and [coordinator review corrections](review-001-003.md). Their existence does not authorize further execution. T0010-001 is first and must cover the whole explicitly requested batch. IDs are maintenance IDs, separate from `execution/tasks.json` application delivery records.
 
 | Task | Work | Depends on | Requirement |
 |---|---|---|---|
@@ -36,7 +36,7 @@ For bootstrap only, acceptance of 001 means readiness for its explicitly authori
 - [x] T0010-001 — Offline readiness for 001–003 recorded; paid workers remain blocked and future readiness must be refreshed.
 - [x] T0010-002 — Offline bootstrap independently reviewed; P1 ancestor-order repair and 38 focused tests accepted; production CLI/API remain locked.
 - [x] T0010-003 — Scoped baseline and red/green evidence independently reviewed and coordinator-accepted; final aggregate remains T0010-019.
-- [ ] T0010-004 — P1 candidate/configuration bypass closed.
+- [x] T0010-004 — P1 candidate/configuration bypass closed; 30 guarded offline tests, independent review and coordinator acceptance.
 - [ ] T0010-005 — P2 environment evidence and resource-set gaps closed.
 - [ ] T0010-006 — P1 empty/invalid reviewer approval rejected.
 - [ ] T0010-007 — P1 partial rollback/orphan-history gap closed; external trust boundary explicit.
