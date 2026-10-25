@@ -76,7 +76,12 @@ class ExecutionTest(unittest.TestCase):
    with self.assertRaises(Blocked):decide_gate(self.task,'candidate',r)
  def test_mutated_raw_evidence_rejected(self):
   f=self.path/'result';f.write_text('changed')
-  with self.assertRaises(Blocked):verify_artifacts({'tests':{'artifact_hashes':{str(f):'previous'}}})
+  from execution.gates import report
+  task=dict(self.task,checks=[])
+  bound=report(self.path,'static',task,'candidate',[f])
+  verify_artifacts({'static':bound},run=self.path,task=task,candidate='candidate')
+  f.write_text('tampered after valid binding')
+  with self.assertRaisesRegex(Blocked,'changed stage artifact'):verify_artifacts({'static':bound},run=self.path,task=task,candidate='candidate')
  def test_source_change_invalidates_identity_but_cache_does_not(self):
   f=self.path/'source.java';f.write_text('one');a=identity(self.path);(self.path/'.cache').mkdir();(self.path/'.cache'/'generated').write_text('output');self.assertEqual(a,identity(self.path));f.write_text('two');self.assertNotEqual(a,identity(self.path))
  def test_junit_skipped_failed_empty_and_malformed_rejected(self):
@@ -87,11 +92,11 @@ class ExecutionTest(unittest.TestCase):
   f.write_text('<testsuite tests="2" failures="0" skipped="0"/>');self.assertEqual(2,junit(f))
  def test_midrun_environment_loss_stops_child_and_preserves_failure(self):
   with patch('execution.gates.probe',side_effect=[[],Blocked('database lost')]):
-   with self.assertRaises(Blocked):monitored([sys.executable,'-c','import time; time.sleep(30)'],self.path,dict(os.environ),{},self.task,self.path,'loss',timeout=40)
+   with self.assertRaises(Blocked):monitored([sys.executable,'-c','import time; time.sleep(30)'],self.path,dict(os.environ,STONE_TEST_CANDIDATE='candidate',STONE_TEST_RUN_ID=self.path.name),{},self.task,self.path,'loss',timeout=40)
   r=json.loads((self.path/'loss-environment-failure.json').read_text());self.assertEqual('BLOCKED_ENVIRONMENT',r['status']);self.assertIsNotNone(r['observed_process_exit'])
  def test_nonzero_test_exit_cannot_become_pass(self):
   with patch('execution.gates.probe',return_value=[]):
-   with self.assertRaises(Blocked):monitored([sys.executable,'-c','raise SystemExit(3)'],self.path,dict(os.environ),{},self.task,self.path,'failure')
+   with self.assertRaises(Blocked):monitored([sys.executable,'-c','raise SystemExit(3)'],self.path,dict(os.environ,STONE_TEST_CANDIDATE='candidate',STONE_TEST_RUN_ID=self.path.name),{},self.task,self.path,'failure')
  def test_planner_does_not_run_missing_dependencies(self):
   selected=[t for t in tasks() if t['id']=='T0003-002'];p=plan(selected);self.assertEqual([],p['waves']);self.assertIn('T0003-002',p['blocked_dependencies'])
  def test_planned_wave_respects_exclusive_resources(self):
@@ -141,13 +146,13 @@ class ExecutionTest(unittest.TestCase):
   from execution.test_environment import check_manifest
   manifest={'schema':1,'task':'T9000-002','candidate':'abc','run_id':'run','generation':'one','resources':[{'name':'actual-jdbc','health_url':'http://127.0.0.1:12345/health'}]}
   fetch=lambda url:{'status':'READY','run_id':'run','generation':'one','checks':[{'status':'READY','name':'jdbc SELECT 1'}]}
-  self.assertEqual(1,len(check_manifest(manifest,'T9000-002','abc','run',fetch)))
-  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','changed','run',fetch)
+  self.assertEqual(1,len(check_manifest(manifest,'T9000-002','abc','run',fetch,expected_resources={'actual-jdbc':('jdbc SELECT 1',)})))
+  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','changed','run',fetch,expected_resources={'actual-jdbc':('jdbc SELECT 1',)})
   manifest['resources'][0]['health_url']='http://outside.invalid/health'
-  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','abc','run',fetch)
+  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','abc','run',fetch,expected_resources={'actual-jdbc':('jdbc SELECT 1',)})
  def test_empty_actual_dependency_probe_cannot_pass(self):
   from execution.test_environment import check_manifest
   manifest={'schema':1,'task':'T9000-002','candidate':'abc','run_id':'run','generation':'one','resources':[{'name':'actual-jdbc','health_url':'http://127.0.0.1:12345/health'}]}
   fetch=lambda url:{'status':'READY','run_id':'run','generation':'one','checks':[]}
-  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','abc','run',fetch)
+  with self.assertRaises(Blocked):check_manifest(manifest,'T9000-002','abc','run',fetch,expected_resources={'actual-jdbc':('jdbc SELECT 1',)})
 if __name__=='__main__':unittest.main()

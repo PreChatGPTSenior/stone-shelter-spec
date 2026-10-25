@@ -99,7 +99,13 @@ class WorkflowTest(unittest.TestCase):
             return report(run, stage_name, task, candidate, [raw], **extra)
         def static(task, tree, run, env, candidate, names, *, trusted_root=None, stack=None): return fixture_report('static', task, run, candidate)
         def tests(task, tree, run, env, stack, candidate): return fixture_report('tests', task, run, candidate, tests=1)
-        def browser(task, tree, run, env, stack, candidate): return fixture_report('browser', task, run, candidate, assertions=1)
+        def browser(task, tree, run, env, stack, candidate):
+            from execution.evidence import context, monitor_artifacts, complete_monitor
+            for name in monitor_artifacts('browser'):
+                json_write(run/name, {**context(run,task['id'],candidate),'state':'COMPLETED','checks':[],
+                                      **({'observations':[{'checks':[]}]} if name.endswith('-during.json') else {})})
+            complete_monitor(run,'browser',task,candidate)
+            return fixture_report('browser', task, run, candidate, assertions=1)
 
         with ExitStack() as stack:
             for target, name, value in [(engine, 'ROOT', root), (runtime, 'ROOT', root),
@@ -183,7 +189,7 @@ class WorkflowTest(unittest.TestCase):
             if event['event'] in ('stage.completed', 'gate.completed'):
                 paths.add(Path(event['payload']['artifact']))
                 if event['event'] == 'stage.completed':
-                    paths.update(Path(p) for p in event['payload']['report']['artifact_hashes'])
+                    paths.update(Path(event['payload']['artifact']).parent / p for p in event['payload']['report']['artifact_hashes'])
         for path in sorted(paths):
             with self.subTest(path=path.name):
                 original = path.read_bytes()
@@ -193,7 +199,7 @@ class WorkflowTest(unittest.TestCase):
                 with self.assertRaises(Blocked): verify_evidence(directory)
                 path.write_bytes(original)
         static = next(e for e in events if e['event']=='stage.completed' and e['payload']['stage']=='static')
-        Path(next(iter(static['payload']['report']['artifact_hashes']))).unlink()
+        (Path(static['payload']['artifact']).parent / next(iter(static['payload']['report']['artifact_hashes']))).unlink()
         with self.assertRaises(Blocked): backup(directory, root / 'bad-copy')
         self.assertFalse((root / 'bad-copy').exists())
 

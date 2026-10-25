@@ -47,3 +47,16 @@ def retained_artifacts(directory):
                 # Do not stat/follow the entry or read its content.
                 return True
     return False
+
+
+def evidence_path(root, reference):
+    """Resolve only a relative artifact inside an explicitly trusted attempt root."""
+    from .core import Blocked
+    from .check_selection import checked_root
+    if not isinstance(reference, str): raise Blocked('Invalid evidence reference')
+    path = Path(reference)
+    if (not path.parts or path.is_absolute() or '..' in path.parts
+            or any(part.lower() in PROTECTED_NAMES for part in path.parts)
+            or secret_path(path.parts)):
+        raise Blocked('Unsafe relative evidence reference')
+    return safe(checked_root(root), reference)

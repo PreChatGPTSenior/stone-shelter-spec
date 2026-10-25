@@ -26,7 +26,9 @@ def audit(event,task,run,payload):
 
 def stage(run,task,name,value):
  artifact=run/(name+'.json')
- audit('stage.completed',task,run,{'stage':name,'report':value,'artifact':str(artifact),'sha256':sha(artifact)})
+ audit('stage.completed',task,run,{'stage':name,'report':value,'artifact':str(artifact),'sha256':sha(artifact),
+       'owner':run.relative_to(ROOT/'.execution/runs').parts[0],
+       'cycle':str(run.relative_to(ROOT/'.execution')),'candidate':value['candidate']})
  return value
 
 def budget_guard(bindings=()):
@@ -79,10 +81,11 @@ def prepare_dependencies(tree,env):
  command(['npm','ci','--ignore-scripts','--no-audit','--no-fund','--cache',str(ROOT/'.cache/npm')],cwd=tree/'stone-shelter-ui',env=env,timeout=600)
 
 def cycle(task,tree,run,env,stack,base):
- audit('cycle.started',task,run,{'base_commit':base,'cycle':str(run.relative_to(ROOT/'.execution'))})
+ audit('cycle.started',task,run,{'base_commit':base,'cycle':str(run.relative_to(ROOT/'.execution')),'candidate':identity(tree)})
  try:
   result=verify_cycle(task,tree,run,env,stack,base)
-  audit('gate.completed',task,run,{**result,'artifact':str(run/'gate.json'),'sha256':sha(run/'gate.json')})
+  audit('gate.completed',task,run,{**result,'artifact':str(run/'gate.json'),'sha256':sha(run/'gate.json'),
+        'owner':run.relative_to(ROOT/'.execution/runs').parts[0],'cycle':str(run.relative_to(ROOT/'.execution'))})
   return result
  except BaseException as error:
   audit('gate.blocked',task,run,{'reason':str(error)[:500],'cycle':str(run.relative_to(ROOT/'.execution'))})
@@ -93,7 +96,8 @@ def verify_cycle(task,tree,run,env,stack,base):
  run.mkdir(parents=True,exist_ok=True);candidate=identity(tree)
  if 'docker' in task['environment']:start(stack,candidate,env=env)
  checks=probe(stack,task,env,include_tools=True,candidate_root=tree)
- p=run/'environment-raw.json';json_write(p,{'covered_task_ids':[task['id']],'candidate':candidate,'checks':checks,'status':'READY'})
+ p=run/'environment-raw.json';json_write(p,{'schema':1,'task':task['id'],'attempt':run.parent.name,'run_id':run.name,'state':'COMPLETED',
+       'covered_task_ids':[task['id']],'candidate':candidate,'checks':checks,'status':'READY'})
  reports={'environment':stage(run,task,'environment',report(run,'environment',task,candidate,[p]))}
  names=changed(tree,base);check_scope(task,names)
  reports['static']=stage(run,task,'static',static_gate(task,tree,run,env,candidate,names,trusted_root=ROOT,stack=stack))
@@ -111,7 +115,7 @@ def verify_cycle(task,tree,run,env,stack,base):
  context['reports']=reports;out,who=actor('browser_review',task,tree,run,context)
  reports['browser_review']=agent_report(run,'browser_review',task,candidate,out,who)
  if identity(tree)!=candidate:raise Blocked('Candidate changed after review')
- budget_guard();verify_artifacts(reports);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
+ budget_guard();verify_artifacts(reports,run=run,task=task,candidate=candidate);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
  return result
 
 def work(task,state,coordinator,env):

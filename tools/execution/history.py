@@ -9,6 +9,7 @@ import uuid
 
 from .core import Blocked, safe, sha, stable
 from .audit_paths import retained_artifacts, secret_path
+from .evidence import verify_report
 
 
 def read_rows(path, table):
@@ -143,7 +144,7 @@ def verify_evidence(directory, events=None):
     events = timeline(directory / 'trace.sqlite') if events is None else events
     gaps = database_state(directory, events)[-1]
     if gaps: raise Blocked('Incomplete audit database set: ' + '; '.join(gaps))
-    def artifact(reference):
+    def artifact_parts(reference):
         parts = Path(reference).parts
         if any(part.lower() == 'engineering-log' for part in parts): raise Blocked('Protected evidence path')
         if '.execution' in parts: parts = parts[parts.index('.execution') + 1:]
@@ -151,15 +152,36 @@ def verify_evidence(directory, events=None):
             raise Blocked('Evidence is outside the audit directory')
         if secret_path(parts):
             raise Blocked('Required evidence references an excluded secret path; preserve source for reviewed reconciliation')
-        return safe(directory, str(Path(*parts)))
+        if '..' in parts:raise Blocked('Unbounded audit reference')
+        return parts
+    def artifact(reference):
+        return safe(directory,str(Path(*artifact_parts(reference))))
     def verify_hash(reference, expected):
         path = artifact(reference)
         if not path.is_file() or sha(path) != expected:
             raise Blocked('Missing or changed audit evidence: ' + str(path))
     raw = {}
+    packets={};cycles={}
     for event in events:
         payload = event['payload']
+        owner,key=event['trace'],(event['trace'],event['task'])
+        if event['event']=='task.claimed' and 'packet' in payload:
+            if payload.get('owner')!=owner or payload['packet'].get('id')!=event['task'] or key in packets:
+                raise Blocked('Ambiguous or foreign owner task obligations')
+            packets[key]=payload['packet']
+        if event['event']=='cycle.started':
+            parts=artifact_parts(payload.get('cycle',''))
+            if key not in packets or parts[:2]!=('runs',owner) or len(parts)<3 or not payload.get('candidate'):
+                raise Blocked('Foreign or incomplete cycle identity')
+            cycles[key]=(parts,payload['candidate'])
         if event['event'] in ('stage.completed', 'gate.completed'):
+            if key not in packets or key not in cycles:raise Blocked('Stage lacks owned task/cycle obligations')
+            cycle,candidate=cycles[key]
+            expected_leaf=payload.get('stage')+'.json' if event['event']=='stage.completed' and isinstance(payload.get('stage'),str) else 'gate.json'
+            if (payload.get('owner')!=owner or artifact_parts(payload.get('cycle',''))!=cycle
+                    or payload.get('candidate')!=candidate
+                    or artifact_parts(payload.get('artifact',''))!=(*cycle,expected_leaf)):
+                raise Blocked('Foreign owner/cycle evidence namespace')
             if 'artifact' not in payload or 'sha256' not in payload:
                 raise Blocked('Stage/gate lacks file evidence; explicit requalification required')
             verify_hash(payload['artifact'], payload['sha256'])
@@ -167,8 +189,8 @@ def verify_evidence(directory, events=None):
                 report = payload.get('report', {})
                 if not report.get('artifact_hashes'):
                     raise Blocked('Stage lacks raw evidence')
-                for reference, digest in report['artifact_hashes'].items():
-                    verify_hash(reference, digest)
+                if report.get('stage')!=payload.get('stage'):raise Blocked('Wrong retained stage identity')
+                verify_report(safe(directory,str(Path(*cycle))),report,packets[key],candidate)
         if event['event'] == 'cli.event':
             raw.setdefault(artifact(payload['raw_artifact']), {})[payload['line']] = payload['raw_event_sha256']
         if event['event'] in ('invocation.started', 'invocation.finished'):

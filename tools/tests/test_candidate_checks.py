@@ -100,7 +100,15 @@ class CandidateChecksTest(unittest.TestCase):
     def test_package_adapter_passes_candidate_to_trusted_validator(self):
         self.task['checks'] = [{'adapter': 'package', 'selector': 'package'}]
         def fake(argv, cwd, env, stack, task, run, name):
-            self.calls.append((argv, cwd)); p = run/(name+'.log'); p.write_text('fixture'); return p
+            from execution.evidence import context, monitor_artifacts, complete_monitor
+            self.calls.append((argv, cwd)); p = run/(name+'.log'); p.write_text('fixture')
+            for reference in monitor_artifacts(name):
+                if reference==name+'.log':continue
+                json_write(run/reference,{**context(run,task['id'],env['STONE_TEST_CANDIDATE']),
+                    'state':'COMPLETED','checks':[],
+                    **({'observations':[{'checks':[]}]} if reference.endswith('-during.json') else {})})
+            complete_monitor(run,name,task,env['STONE_TEST_CANDIDATE'])
+            return p
         with patch.object(gates, 'monitored', side_effect=fake):
             result = gates.selected_tests(self.task, self.tree, self.run, {}, None, identity(self.tree))
         argv, cwd = self.calls[0]
