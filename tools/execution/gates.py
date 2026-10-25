@@ -17,10 +17,26 @@ def report(run,stage,task,candidate,artifacts,**extra):
         'artifact_hashes':report_artifacts(run,stage,task,candidate,artifacts),**extra}
  json_write(run/(stage+'.json'),value);return value
 
-def verify_artifacts(reports,*,run,task,candidate):
+def reviewed_report(run,role,task,candidate,out,who,contract,emitted_result=None):
+ from .evidence import bind_review_contract,validate_review,ReviewEvidenceError
+ from copy import deepcopy
+ bind_review_contract(run,task,candidate,role,contract)
+ envelope=json_read(out)
+ if envelope.get('execution',{}).get('session')!=who or envelope.get('execution',{}).get('kind')!='agent':
+  raise ReviewEvidenceError('Foreign actor or compatibility invocation is not an implementation review')
+ if emitted_result is None or envelope.get('agent_result')!=emitted_result:raise ReviewEvidenceError('Reviewer decision differs from independently retained invocation output')
+ validation=validate_review(run,envelope.get('agent_result'),contract,who)
+ reference=Path(out).relative_to(run).as_posix()
+ return report(run,role,task,candidate,[out],actor=who,review_validation=validation,
+  review_contract=deepcopy(contract),review_result_reference=reference,
+  model_selection=envelope['execution']['selection'],usage=envelope['execution']['usage'],
+  budget=envelope['execution']['budget'],elapsed_seconds=envelope['execution']['elapsed_seconds'])
+
+def verify_artifacts(reports,*,run,task,candidate,review_contracts=None,review_results=None):
  for stage,value in reports.items():
   if value.get('stage')!=stage:raise Blocked('Wrong stage evidence')
-  verify_report(run,value,task,candidate)
+  verify_report(run,value,task,candidate,expected_review_contract=(review_contracts or {}).get(value.get('actor')),
+                expected_review_result=(review_results or {}).get(value.get('actor')))
 
 def retain_static_artifacts(run,paths,expected=None):
  # Analyzer caches are disposable and outside audit backups. Preserve verified

@@ -121,7 +121,7 @@ def report_artifacts(run,stage,task,candidate,artifacts):
     return refs
 
 
-def verify_report(run,report,task,candidate):
+def verify_report(run,report,task,candidate,*,expected_review_contract=None,expected_review_result=None):
     expected=context(run,task['id'],candidate)
     if report.get('status')!='PASS' or any(report.get(k)!=v for k,v in expected.items()):raise Blocked('Foreign or incomplete stage evidence')
     refs=report.get('artifact_hashes',{})
@@ -137,4 +137,97 @@ def verify_report(run,report,task,candidate):
     for reference,digest in refs.items():
         path=evidence_path(run,reference)
         if not path.is_file() or sha(path)!=digest:raise Blocked('Missing or changed stage artifact')
+    if report['stage'] in REVIEW_ROLES:
+        if expected_review_contract is None:raise ReviewEvidenceError('Missing independently retained review contract anchor')
+        contract=expected_review_contract
+        if report.get('review_contract')!=contract:raise ReviewEvidenceError('Review contract differs from independent admission anchor')
+        bind_review_contract(run,task,candidate,report['stage'],contract)
+        reference=report.get('review_result_reference')
+        if reference not in refs:raise ReviewEvidenceError('Stage omits reviewer result')
+        envelope=load_artifact(run,reference)
+        if envelope.get('execution',{}).get('session')!=report.get('actor') or envelope.get('execution',{}).get('kind')!='agent':
+            raise ReviewEvidenceError('Review actor or invocation kind mismatch')
+        if expected_review_result is None or envelope.get('agent_result')!=expected_review_result:
+            raise ReviewEvidenceError('Reviewer decision differs from verified invocation output')
+        validation=validate_review(run,envelope.get('agent_result'),contract,report.get('actor'))
+        if report.get('review_validation')!=validation:raise ReviewEvidenceError('Changed review validation')
     return report
+
+REVIEW_ROLES={'code_review','test_engineer','test_review','browser_planner','browser_review'}
+
+class ReviewEvidenceError(Blocked):
+    def __init__(self,message,status='INVALID_EVIDENCE'):
+        self.status=status
+        super().__init__(status+': '+message)
+
+
+def bind_review_contract(run,task,candidate,role,contract):
+    if not isinstance(contract,dict):raise ReviewEvidenceError('Missing trusted review contract')
+    expected={**context(run,task['id'],candidate),'role':role,
+              'requirements':sorted(set(task.get('requirements',[]))),
+              'acceptance':sorted(set(task.get('acceptance',[])))}
+    if any(contract.get(k)!=v for k,v in expected.items()):raise ReviewEvidenceError('Foreign assigned review contract')
+
+
+def review_contract(run,task,candidate,role,reports,author_sessions,*,review_contracts=None,review_results=None):
+    from .core import stable
+    artifacts={}
+    for stage,value in reports.items():
+        if value.get('stage')!=stage:raise ReviewEvidenceError('Wrong prerequisite stage')
+        verify_report(run,value,task,candidate,expected_review_contract=(review_contracts or {}).get(value.get('actor')),
+                      expected_review_result=(review_results or {}).get(value.get('actor')))
+        artifacts.update(value['artifact_hashes'])
+        artifacts[stage+'.json']=sha(evidence_path(run,stage+'.json'))
+    return contract_from_artifacts(run,task,candidate,role,artifacts,author_sessions)
+
+
+def contract_from_artifacts(run,task,candidate,role,artifacts,author_sessions):
+    from .core import stable
+    if not artifacts:raise ReviewEvidenceError('No trusted review artifacts')
+    for reference,digest in artifacts.items():
+        path=evidence_path(run,reference)
+        if not path.is_file() or sha(path)!=digest:raise ReviewEvidenceError('Invalid trusted review artifact')
+    body={'schema':1,**context(run,task['id'],candidate),'role':role,
+          'requirements':sorted(set(task.get('requirements',[]))),
+          'acceptance':sorted(set(task.get('acceptance',[]))),
+          'artifacts':artifacts,'author_sessions':sorted(set(author_sessions))}
+    return {**body,'contract_sha256':stable(body)}
+
+
+def validate_review(run,result,contract,reviewer_session):
+    from .core import stable
+    def invalid(message):raise ReviewEvidenceError(message)
+    if not isinstance(contract,dict):invalid('Missing trusted review contract')
+    body={key:value for key,value in contract.items() if key!='contract_sha256'}
+    if contract.get('contract_sha256')!=stable(body) or not contract.get('artifacts'):invalid('Invalid trusted review contract')
+    keys={'schema','kind','task','candidate','attempt','run_id','role','contract_sha256',
+          'requirements','acceptance','status','summary','findings','evidence'}
+    if not isinstance(result,dict) or set(result)!=keys or type(result.get('schema')) is not int or result['schema']!=2 or result['kind']!='review':
+        invalid('Review schema 2 is required; legacy/work/compatibility results do not qualify')
+    if any(result.get(key)!=contract.get(key) for key in ('task','candidate','attempt','run_id','role','contract_sha256')):
+        invalid('Foreign or stale review identity')
+    if contract.get('role') not in REVIEW_ROLES or not reviewer_session or reviewer_session in contract.get('author_sessions',[]):invalid('Self-review or missing reviewer identity')
+    if not isinstance(result['summary'],str) or not result['summary'].strip():invalid('Empty reviewer rationale')
+    if not isinstance(result['findings'],list) or not all(isinstance(item,str) and item.strip() for item in result['findings']):invalid('Invalid reviewer findings')
+    if result['status'] not in {'APPROVED','CHANGES_REQUESTED','BLOCKED'}:invalid('Unknown emitted decision')
+    if result['status']=='BLOCKED':raise ReviewEvidenceError('Reviewer reports unavailable environment','BLOCKED_ENVIRONMENT')
+    if result['status']=='CHANGES_REQUESTED' or result['findings']:
+        raise ReviewEvidenceError('Reviewer requested changes','REJECTED')
+    for name in ('requirements','acceptance'):
+        values=result[name]
+        if not isinstance(values,list) or not all(isinstance(v,str) for v in values) or len(values)!=len(set(values)) or set(values)!=set(contract[name]):invalid('Missing or foreign '+name+' coverage')
+    evidence=result['evidence']
+    if not isinstance(evidence,list):invalid('Missing reviewer evidence')
+    observed={}
+    for item in evidence:
+        if not isinstance(item,dict) or set(item)!={'reference','sha256'}:invalid('Invalid reviewer evidence item')
+        reference=item['reference']
+        try:path=evidence_path(run,reference)
+        except Blocked as error:raise ReviewEvidenceError('Unsafe reviewer evidence reference') from error
+        if reference in observed:invalid('Duplicate reviewer evidence')
+        if not path.is_file() or sha(path)!=item['sha256']:invalid('Forged or stale reviewer evidence digest')
+        observed[reference]=item['sha256']
+    if not set(contract['artifacts'])<=set(observed):invalid('Reviewer omitted mandatory coordinator evidence')
+    if any(observed[reference]!=digest for reference,digest in contract['artifacts'].items()):invalid('Reviewer evidence differs from trusted obligations')
+    return {'status':'VALID_EVIDENCE','semantic_decision':result['status'],
+            'assurance':'Structure, identity and mandatory evidence verified; semantic decision remains the reviewer\'s'}

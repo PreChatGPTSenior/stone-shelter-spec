@@ -2,6 +2,39 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "task": {
+      "type": "string"
+    },
+    "candidate": {
+      "type": "string"
+    },
+    "attempt": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "contract_sha256": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "review"
+      ]
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -10,10 +43,19 @@
         "BLOCKED"
       ]
     },
-    "summary": {
-      "type": "string"
-    },
     "findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "acceptance": {
       "type": "array",
       "items": {
         "type": "string"
@@ -22,14 +64,37 @@
     "evidence": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ]
       }
     }
   },
   "required": [
-    "status",
+    "task",
+    "candidate",
+    "attempt",
+    "run_id",
+    "role",
+    "contract_sha256",
     "summary",
+    "schema",
+    "kind",
+    "status",
     "findings",
+    "requirements",
+    "acceptance",
     "evidence"
   ]
 }

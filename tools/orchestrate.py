@@ -48,6 +48,14 @@ def plan(selected,status=None):
  return {'mode':'PLAN_ONLY','waves':waves,'blocked_dependencies':{k:[d for d in t['depends_on'] if d not in done] for k,t in remaining.items()},'limits':{'workers':3,'backend_writers':1,'frontend_writers':1,'model_runtime':1},'implementation_executed':False}
 
 def actor(role,task,tree,run,context):
+ from execution.evidence import REVIEW_ROLES,review_contract
+ contract=None
+ if role in REVIEW_ROLES:
+  prior=context.get('reports',{})
+  authors=[value['actor'] for value in prior.values() if value.get('actor')]
+  developer=getattr(LOCAL,'developer_session',None)
+  if not developer:raise Blocked('Missing independent developer identity')
+  contract=review_contract(run,task,context['candidate'],role,prior,authors+[developer],review_contracts=getattr(LOCAL,'review_contracts',{}),review_results=getattr(LOCAL,'review_results',{}))
  if BUDGET is None:raise Blocked('Budget policy was not admitted before agent launch')
  if MODEL_POLICY is None:raise Blocked('Model policy was not admitted before agent launch')
  if stable(load_models([t['id'] for t in tasks()]))!=stable(MODEL_POLICY):raise Blocked('Model policy changed during execution')
@@ -60,14 +68,21 @@ def actor(role,task,tree,run,context):
                 'requirements':task.get('requirements',[]),'acceptance':task.get('acceptance',[]),
                 'change':task.get('change'),'write_paths':task.get('write_paths',[]),
                 'candidate':context.get('candidate'),'base_commit':context.get('base_commit')}
+ if contract:trace_context['review_contract']=contract
  result,execution,session,_=invoke(selection,task['id'],role,tree,run,prompt,task['timeout_seconds'],iteration=run.relative_to(ROOT/'.execution/runs').as_posix(),env=MODEL_ENV,budget=BUDGET,trace_context=trace_context)
+ if contract:
+  if not hasattr(LOCAL,'review_contracts'):LOCAL.review_contracts={}
+  from copy import deepcopy
+  LOCAL.review_contracts[session]=deepcopy(contract)
+  if not hasattr(LOCAL,'review_results'):LOCAL.review_results={}
+  LOCAL.review_results[session]=deepcopy(result)
  output=run/(role+'-'+session+'.json')
  json_write(output,{'agent_result':result,'execution':json_read(execution),'model_preflight':admission})
  return output,session
 
 def agent_report(run,role,task,candidate,out,who):
- envelope=json_read(out)
- return stage(run,task,role,report(run,role,task,candidate,[out],actor=who,model_selection=envelope['execution']['selection'],usage=envelope['execution']['usage'],budget=envelope['execution']['budget'],elapsed_seconds=envelope['execution']['elapsed_seconds']))
+ from execution.gates import reviewed_report
+ return stage(run,task,role,reviewed_report(run,role,task,candidate,out,who,getattr(LOCAL,'review_contracts',{}).get(who),getattr(LOCAL,'review_results',{}).get(who)))
 
 def changed(tree,base):
  # Only a new project worktree is queried. Protected names are excluded by Git pathspec before output.
@@ -115,7 +130,7 @@ def verify_cycle(task,tree,run,env,stack,base):
  context['reports']=reports;out,who=actor('browser_review',task,tree,run,context)
  reports['browser_review']=agent_report(run,'browser_review',task,candidate,out,who)
  if identity(tree)!=candidate:raise Blocked('Candidate changed after review')
- budget_guard();verify_artifacts(reports,run=run,task=task,candidate=candidate);result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
+ budget_guard();verify_artifacts(reports,run=run,task=task,candidate=candidate,review_contracts=getattr(LOCAL,'review_contracts',{}),review_results=getattr(LOCAL,'review_results',{}));result=decide_gate(task,candidate,reports);json_write(run/'gate.json',result)
  return result
 
 def work(task,state,coordinator,env):
@@ -147,7 +162,7 @@ def work(task,state,coordinator,env):
   for attempt in range(task['max_attempts']):
    probe(stack,task,env,include_tools=True,candidate_root=tree)
    attempt_run=run/('attempt-'+str(attempt+1));attempt_run.mkdir()
-   out,_=actor('developer',task,tree,attempt_run,{'base_commit':base,'run_directory':str(run),'readiness':str(run/'pre-implementation.json'),'stack_urls':{k:stack[k] for k in ['api','ui']},'output_test_path':'quality/e2e/'+task['id']+'/*.spec.ts','previous_failure':feedback})
+   out,LOCAL.developer_session=actor('developer',task,tree,attempt_run,{'base_commit':base,'run_directory':str(run),'readiness':str(run/'pre-implementation.json'),'stack_urls':{k:stack[k] for k in ['api','ui']},'output_test_path':'quality/e2e/'+task['id']+'/*.spec.ts','previous_failure':feedback})
    check_scope(task,changed(tree,base))
    try:cycle(task,tree,attempt_run/'candidate',env,stack,base);break
    except Blocked as failure:

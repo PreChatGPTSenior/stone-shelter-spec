@@ -22,6 +22,7 @@ from .history import History
 from .money import dollars, micros
 from .model_policy import cli_args
 from .supervision import close_lease, launch
+from .evidence import REVIEW_ROLES,ReviewEvidenceError,validate_review
 
 
 def utc():
@@ -135,6 +136,9 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
         raise Blocked('Budget admission required before model invocation')
     session = uuid.uuid4().hex
     trace_context = dict(trace_context or {})
+    reviewing=kind=='agent' and role in REVIEW_ROLES
+    contract=trace_context.get('review_contract')
+    if reviewing and not contract:raise ReviewEvidenceError('Missing trusted review obligations before invocation')
     trace = trace_context.get('attempt_id', session)
     history = History(ROOT / '.execution/trace.sqlite')
     def emit(event, payload):
@@ -152,9 +156,19 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
     log = folder / (role + '-' + session + '.events.jsonl')
     errors = folder / (role + '-' + session + '.stderr.log')
     receipt = folder / (role + '-' + session + '.execution.json')
+    result_schema=ROOT/'templates/agent-result.schema.json'
+    if not reviewing:
+        result_schema=folder/(role+'-'+session+'.schema.json')
+        json_write(result_schema,{'type':'object','additionalProperties':False,
+            'properties':{'status':{'type':'string','enum':['APPROVED','CHANGES_REQUESTED','BLOCKED']},
+                          'summary':{'type':'string'},'findings':{'type':'array','items':{'type':'string'}},
+                          'evidence':{'type':'array','items':{'type':'string'}}},
+            'required':['status','summary','findings','evidence']})
+    else:
+        prompt+='\nTrusted review obligations (schema 2; cover every requirement, acceptance ID and artifact):\n'+json.dumps(contract,sort_keys=True)
     argv = ['codex', 'exec', '--ephemeral', '--sandbox',
             'workspace-write' if role == 'developer' and kind == 'agent' else 'read-only',
-            '--cd', str(workspace), '--output-schema', str(ROOT / 'templates/agent-result.schema.json'),
+            '--cd', str(workspace), '--output-schema', str(result_schema),
             '--output-last-message', str(output), '--json', *cli_args(selection)]
     if kind == 'preflight':
         argv.append('--skip-git-repo-check')
@@ -265,6 +279,7 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
                                  'scope': 'Observed before/after hashes inside assigned write paths', 'changes': changes})
         record = {'schema': 1, 'session': session, 'kind': kind, 'task': task_id,
                   'role': role, 'iteration': str(iteration), 'selection': selection,
+                  'result_assurance':'REVIEW_EVIDENCE_PENDING' if reviewing else 'COMPATIBILITY_ONLY' if kind=='preflight' else 'WORK_RESULT_NOT_REVIEW',
                   'trace': trace, 'context': trace_context, 'input_artifact': reference(input_path),
                   'changes_artifact': reference(changes_path), 'changes_sha256': sha(changes_path),
                   'started_at': started_at, 'ended_at': utc(),
@@ -301,11 +316,13 @@ def invoke(selection, task_id, role, workspace, folder, prompt, timeout,
         result = json.loads(clean)
     except ValueError as error:
         raise Blocked('Invalid structured agent result') from error
-    if (not isinstance(result, dict) or set(result) != {'status', 'summary', 'findings', 'evidence'}
-            or result['status'] != 'APPROVED' or result['findings'] != []
-            or not isinstance(result['summary'], str) or not isinstance(result['evidence'], list)
-            or not all(isinstance(item, str) for item in result['evidence'])):
-        raise Blocked('Agent returned findings or blocked; inspect its private result')
+    if reviewing:
+        validate_review(folder,result,contract,session)
+    elif (not isinstance(result,dict) or set(result)!={'status','summary','findings','evidence'}
+            or result['status']!='APPROVED' or result['findings']!=[]
+            or not isinstance(result['summary'],str) or not result['summary'].strip()
+            or not isinstance(result['evidence'],list) or not all(isinstance(item,str) for item in result['evidence'])):
+        raise Blocked('Invalid non-review work/compatibility result')
     if metrics['status'] != 'COMPLETE':
         raise Blocked('Usage telemetry missing/incomplete; cannot admit unaccounted agent result')
     return result, receipt, session, usage

@@ -9,7 +9,7 @@ import uuid
 
 from .core import Blocked, safe, sha, stable
 from .audit_paths import retained_artifacts, secret_path
-from .evidence import verify_report
+from .evidence import verify_report,REVIEW_ROLES
 
 
 def read_rows(path, table):
@@ -161,7 +161,7 @@ def verify_evidence(directory, events=None):
         if not path.is_file() or sha(path) != expected:
             raise Blocked('Missing or changed audit evidence: ' + str(path))
     raw = {}
-    packets={};cycles={}
+    packets={};cycles={};review_inputs={};review_anchors={}
     for event in events:
         payload = event['payload']
         owner,key=event['trace'],(event['trace'],event['task'])
@@ -190,16 +190,54 @@ def verify_evidence(directory, events=None):
                 if not report.get('artifact_hashes'):
                     raise Blocked('Stage lacks raw evidence')
                 if report.get('stage')!=payload.get('stage'):raise Blocked('Wrong retained stage identity')
-                verify_report(safe(directory,str(Path(*cycle))),report,packets[key],candidate)
+                verify_report(safe(directory,str(Path(*cycle))),report,packets[key],candidate,
+                    expected_review_contract=review_anchors.get((owner,event['task'],report.get('actor'),report.get('stage')),{}).get('contract'),
+                    expected_review_result=review_anchors.get((owner,event['task'],report.get('actor'),report.get('stage')),{}).get('result'))
         if event['event'] == 'cli.event':
             raw.setdefault(artifact(payload['raw_artifact']), {})[payload['line']] = payload['raw_event_sha256']
         if event['event'] in ('invocation.started', 'invocation.finished'):
-            key, digest = ('input_artifact', 'input_sha256') if event['event'] == 'invocation.started' else ('receipt', 'sha256')
-            if key in payload: verify_hash(payload[key], payload[digest])
-            if event['event'] == 'invocation.finished':
-                receipt = json.loads(artifact(payload['receipt']).read_text())
-                for reference, expected_hash in receipt.get('artifact_hashes', {}).items():
-                    verify_hash(reference, expected_hash)
+            review_key=(owner,event['task'],event.get('session'),event.get('role'))
+            reviewing=event.get('role') in REVIEW_ROLES and key in cycles
+            if event['event']=='invocation.started':
+                if reviewing and payload.get('kind')=='agent':
+                    cycle,candidate=cycles[key]
+                    if artifact_parts(payload.get('input_artifact',''))!=(*cycle,event['role']+'-'+event['session']+'.input.json'):
+                        raise Blocked('Foreign review invocation input namespace')
+                if 'input_artifact' in payload:verify_hash(payload['input_artifact'],payload['input_sha256'])
+                if reviewing and payload.get('kind')=='agent':
+                    value=json.loads(artifact(payload['input_artifact']).read_text())
+                    context=value.get('context',{})
+                    if (context!=payload.get('context') or context.get('attempt_id')!=owner
+                            or context.get('candidate')!=candidate or not context.get('review_contract')):
+                        raise Blocked('Missing or foreign admitted review context')
+                    if review_key in review_inputs:raise Blocked('Ambiguous review invocation input')
+                    review_inputs[review_key]=(cycle,candidate,context,payload['input_artifact'])
+            else:
+                if reviewing:
+                    if review_key not in review_inputs:raise Blocked('Missing correlated review invocation input')
+                    cycle,candidate,context,input_reference=review_inputs[review_key]
+                    if cycles[key]!=(cycle,candidate) or artifact_parts(payload.get('receipt',''))!=(*cycle,event['role']+'-'+event['session']+'.execution.json'):
+                        raise Blocked('Foreign review receipt namespace or cycle')
+                if 'receipt' in payload:verify_hash(payload['receipt'],payload['sha256'])
+                receipt=json.loads(artifact(payload['receipt']).read_text())
+                for reference,expected_hash in receipt.get('artifact_hashes',{}).items():verify_hash(reference,expected_hash)
+                if reviewing:
+                    expected={'session':event['session'],'task':event['task'],'role':event['role'],
+                              'trace':owner,'kind':'agent','status':'COMPLETED',
+                              'iteration':str(Path(*cycle[1:]))}
+                    if (any(receipt.get(k)!=v for k,v in expected.items()) or payload.get('status')!='COMPLETED'
+                            or receipt.get('context')!=context or receipt.get('usage',{}).get('status')!='COMPLETE'
+                            or artifact_parts(receipt.get('input_artifact',''))!=artifact_parts(input_reference)):
+                        raise Blocked('Review receipt differs from verified admission anchor')
+                    if review_key in review_anchors:raise Blocked('Ambiguous completed review invocation')
+                    raw_reference=receipt.get('raw_result','')
+                    if artifact_parts(raw_reference)!=(*cycle,event['role']+'-'+event['session']+'.result.json'):
+                        raise Blocked('Foreign emitted reviewer result namespace')
+                    hashes={artifact_parts(reference):digest for reference,digest in receipt.get('artifact_hashes',{}).items()}
+                    if artifact_parts(raw_reference) not in hashes:raise Blocked('Receipt lacks hashed emitted reviewer result')
+                    verify_hash(raw_reference,hashes[artifact_parts(raw_reference)])
+                    emitted=json.loads(artifact(raw_reference).read_text())
+                    review_anchors[review_key]={'contract':context['review_contract'],'result':emitted}
     for path, expected in raw.items():
         seen = set()
         with path.open() as stream:

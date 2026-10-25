@@ -78,6 +78,11 @@ class WorkflowTest(unittest.TestCase):
                 value = {'status': 'CHANGES_REQUESTED' if rejected else 'APPROVED',
                          'summary': 'Fixture reviewer found missing coverage' if rejected else 'Fixture evidence satisfies assigned contribution',
                          'findings': ['Fixture missing coverage'] if rejected else [], 'evidence': ['R003', 'A01']}
+                if role != 'developer':
+                    contract=json.loads(output.with_name(output.name.replace('.result.json','.input.json')).read_text())['context']['review_contract']
+                    value.update(schema=2,kind='review',**{key:contract[key] for key in
+                        ('task','candidate','attempt','run_id','role','contract_sha256','requirements','acceptance')})
+                    value['evidence']=[{'reference':reference,'sha256':digest} for reference,digest in contract['artifacts'].items()]
                 output.write_text(json.dumps(value))
                 events = [{'type': 'thread.started', 'thread_id': 'fixture-' + role}, {'type': 'turn.started'},
                           {'type': 'item.completed', 'item': {'id': 'tool-1', 'type': 'command_execution',

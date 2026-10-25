@@ -36,7 +36,9 @@ class MaintenanceTest(unittest.TestCase):
                      'templates/maintenance-task.schema.json', 'templates/maintenance-handoff.schema.json',
                      'tools/execution/agent_runtime.py', 'tools/execution/model_policy.py',
                      'tools/execution/core.py', 'tools/execution/history.py', 'tools/execution/budgets.py',
-                     'tools/execution/money.py', 'tools/execution/audit_paths.py', 'tools/execution/supervision.py'):
+                     'tools/execution/money.py', 'tools/execution/audit_paths.py', 'tools/execution/supervision.py',
+                     'tools/execution/evidence.py', 'tools/execution/check_selection.py',
+                     'templates/agent-result.schema.json'):
             path = self.root / name; path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((ROOT / name).read_bytes())
         json_write(self.root / 'execution/agent-budgets.json', TOKEN_POLICY)
@@ -83,8 +85,13 @@ class MaintenanceTest(unittest.TestCase):
         if not reviewing or self.mutate_review:
             (self.workspace / 'tools/maintenance.py').write_text('changed fixture\n' + str(len(self.started)))
         output = Path(argv[argv.index('--output-last-message') + 1])
-        json_write(output, {'status': 'APPROVED', 'summary': 'Offline fixture result',
-                            'findings': [], 'evidence': ['fixture-only']})
+        result = {'status': 'APPROVED', 'summary': 'Offline fixture result', 'findings': [], 'evidence': ['fixture-only']}
+        if reviewing:
+            contract=json.loads(output.with_name(output.name.replace('.result.json','.input.json')).read_text())['context']['review_contract']
+            result.update(schema=2,kind='review',**{key:contract[key] for key in
+                ('task','candidate','attempt','run_id','role','contract_sha256','requirements','acceptance')})
+            result['evidence']=[{'reference':reference,'sha256':digest} for reference,digest in contract['artifacts'].items()]
+        json_write(output,result)
         class Process:
             pid = None
             returncode = 0
@@ -133,7 +140,9 @@ class MaintenanceTest(unittest.TestCase):
     def test_source_and_policy_changes_invalidate_packet(self):
         for name in (CHANGE + '/task-packets.md', 'execution/agent-models.json',
                      'execution/runtime-lock.json', 'execution/agent-budgets.json',
-                     'tools/execution/agent_runtime.py', 'templates/maintenance-task.schema.json'):
+                     'tools/execution/agent_runtime.py', 'templates/maintenance-task.schema.json',
+                     'tools/execution/evidence.py', 'tools/execution/check_selection.py',
+                     'templates/agent-result.schema.json'):
             packet = self.packet(); path = self.root / name; before = path.read_bytes()
             path.write_bytes(before + b'\n')
             with self.subTest(name=name), self.assertRaises(Blocked):

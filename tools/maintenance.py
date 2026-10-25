@@ -42,6 +42,8 @@ SOURCES = (
     'tools/execution/agent_runtime.py', 'tools/execution/model_policy.py',
     'tools/execution/core.py', 'tools/execution/history.py', 'tools/execution/budgets.py',
     'tools/execution/money.py', 'tools/execution/audit_paths.py', 'tools/execution/supervision.py',
+    'tools/execution/evidence.py', 'tools/execution/check_selection.py',
+    'templates/agent-result.schema.json',
 )
 READINESS_TTL_SECONDS = 300
 # No CLI flag, environment setting or caller argument may enable live dispatch.
@@ -260,10 +262,34 @@ def dispatch_role(packet, role, workspace, folder, *, root=None, readiness=None,
                'candidate': candidate, 'write_paths': packet['write_paths'] if role == 'developer' else [],
                'readiness': deepcopy(readiness), 'previous': previous, 'checks': checks,
                'mode': 'MAINTENANCE_BOOTSTRAP_NOT_APPLICATION_ACCEPTANCE'}
+    if role == 'code_review':
+        from execution.evidence import contract_from_artifacts
+        inputs = folder / 'review-inputs'; inputs.mkdir(mode=0o700)
+        json_write(inputs / 'packet.json', packet)
+        artifacts = {'review-inputs/packet.json': sha(inputs / 'packet.json')}
+        sources = [(f'.execution/runs/{attempt_id}/developer/handoff.json', stable(previous), 'handoff.json'),
+                   (previous['receipt'], previous['receipt_sha256'], 'developer-receipt.json')]
+        for i, (reference, digest) in enumerate(checks['artifact_hashes'].items()):
+            sources.append((reference, digest, 'check-' + str(i)))
+        for reference, digest, name in sources:
+            source = _evidence(root, reference)
+            if name == 'handoff.json':
+                if stable(json_read(source)) != digest: raise Blocked('Developer handoff changed')
+            elif sha(source) != digest: raise Blocked('Required reviewer input changed')
+            target = inputs / name; target.write_bytes(source.read_bytes())
+            if (stable(json_read(target)) if name == 'handoff.json' else sha(target)) != digest:
+                raise Blocked('Required reviewer input changed while retaining it')
+            artifacts['review-inputs/' + name] = sha(target)
+        context['review_contract'] = contract_from_artifacts(folder,
+            {'id': packet['task_id'], 'requirements': ['WA-002' if packet['task_id']=='T0010-002' else 'WA-003'], 'acceptance': []},
+            candidate, role, artifacts, [previous['session']])
     result, receipt_path, session, _ = runtime.invoke(
         selections[role], packet['task_id'], role, workspace, folder, prompt, 180,
         iteration=attempt_id + '/' + role, env={} if env is None else env,
         budget=budget, trace_context=context)
+    if role == 'code_review':
+        from execution.evidence import validate_review
+        validate_review(folder, result, context['review_contract'], session)
     after = {str(p.relative_to(workspace)): sha(p) for p in files(workspace)}
     changed = [p for p in set(before) | set(after) if before.get(p) != after.get(p)]
     if role == 'code_review' and changed:
