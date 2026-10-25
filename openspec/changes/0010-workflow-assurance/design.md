@@ -1,5 +1,7 @@
 # Design for future execution
 
+Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
+
 ## Trust and candidate boundaries
 
 The coordinator owns policy, accounting, evidence and transitions. Agents receive task-scoped worktrees; the reviewer receives a frozen, read-only candidate. Candidate content may supply build configuration but cannot redefine which trusted checks are mandatory or approve itself. A change to a checker, check-selection policy, model policy, resource registry or recovery tool is itself a control-plane change requiring independent qualification.

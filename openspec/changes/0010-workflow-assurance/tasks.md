@@ -1,5 +1,7 @@
 # Maintenance task DAG
 
+Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
+
 T0010-001 has completed its authorized offline readiness; T0010-002 and T0010-003 are authored/offline-verified with independent review pending. T0010-004 onward remain **PLANNED / NOT STARTED**. See [the observed batch report](batch-001-003-report.md) and [coordinator review corrections](review-001-003.md). Their existence does not authorize further execution. T0010-001 is first and must cover the whole explicitly requested batch. IDs are maintenance IDs, separate from `execution/tasks.json` application delivery records.
 
 | Task | Work | Depends on | Requirement |

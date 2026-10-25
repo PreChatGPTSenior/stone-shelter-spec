@@ -1,5 +1,7 @@
 # Executor packets — not execution authorization
 
+Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
+
 Follow-up status: the user authorized T0010-001–003 offline preparation and tests. Their initial results are in [the batch report](batch-001-003-report.md), with subsequently authorized corrections and scoped PR publication in [the review report](review-001-003.md); independent review and live launch remain pending. Other packets below are still future work.
 
 Repository: `/Users/viktoryia/IdeaProjects/stone-shelter-spec-parallel`.

@@ -1,5 +1,7 @@
 # Two-agent maintenance team — prepared, not launched
 
+Current user-authorized supervised subscription execution is defined in [subscription-execution.md](subscription-execution.md); it supersedes the prior paid-worker arrangement only for this development batch and leaves the production runtime locked.
+
 ## Roles and authority
 
 | Participant | Binding | Owns | Cannot do |
