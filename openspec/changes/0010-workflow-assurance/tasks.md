@@ -35,7 +35,7 @@ For bootstrap only, acceptance of 001 means readiness for its explicitly authori
 
 - [x] T0010-001 — Offline readiness for 001–003 recorded; paid workers remain blocked and future readiness must be refreshed.
 - [x] T0010-002 — Offline bootstrap independently reviewed; P1 ancestor-order repair and 38 focused tests accepted; production CLI/API remain locked.
-- [ ] T0010-003 — Historical tests and new regressions passed offline; independent evidence review pending.
+- [x] T0010-003 — Scoped baseline and red/green evidence independently reviewed and coordinator-accepted; final aggregate remains T0010-019.
 - [ ] T0010-004 — P1 candidate/configuration bypass closed.
 - [ ] T0010-005 — P2 environment evidence and resource-set gaps closed.
 - [ ] T0010-006 — P1 empty/invalid reviewer approval rejected.

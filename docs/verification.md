@@ -1,5 +1,9 @@
 # Preparation verification
 
+## Supervised subscription follow-up
+
+Independent `gpt-6.1-sol / high` review found one additional T0010-002 P1 (leaf-first symlink metadata). The `medium` developer reproduced and fixed it; all 38 maintenance tests passed. Independent re-review and coordinator inspection accepted the repair and prior scoped baseline evidence; this is not a new aggregate-suite count or production launch qualification. See [batch progress](../openspec/changes/0010-workflow-assurance/run-progress.md).
+
 ## Current coordinator review: T0010-001–003
 
 **111 selected offline tests passed** (37 maintenance/guard plus 74 existing scoped regressions); strict OpenSpec validation passed. See [the review and correction report](../openspec/changes/0010-workflow-assurance/review-001-003.md) for findings, final scoped test evidence and qualification limits. Both production USD limits remain zero. Live CLI and internal dispatch stay code-locked. The added macOS CI job runs the same selected offline modules and retains its log for 14 days; it does not start agents or contact model providers. Local results do not imply that remote CI has passed.
