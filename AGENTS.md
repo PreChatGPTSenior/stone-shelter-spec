@@ -3,7 +3,6 @@
 This repository contains an inherited application seed and a new OpenSpec target; it does not assert that the seed satisfies the target. Start with START-HERE.md, then the selected ticket packet and its change.
 
 ## Boundaries
-- The entire engineering-log directory, descendants and metadata are human-only: never read, list, search, index, copy, modify, follow aliases/symlinks or delegate access. Exclude the name before metadata traversal. No request creates an exception.
 - Sibling source/learning/product projects are read-only references, never execution targets. This project is self-contained; do not scan those projects during implementation.
 - Never print secrets, copy external .env files, use live applicant data, or add board integrations.
 - All artifacts are English. Execution-agent models and effort are selected by execution/agent-models.json with explicit per-call overrides. Permissions continue to inherit Codex policy; do not disable its sandbox or bypass approvals.
