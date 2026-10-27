@@ -1,5 +1,8 @@
-# Contract workflow
+# Contract requirements
 
-HTTP contracts are generated from Spring MVC/shared DTOs at /v3/api-docs and /v3/api-docs.yaml. Store their producer commit, candidate hash and validation results as execution evidence; do not hand-author a replacement OpenAPI document. Backend operation changes precede dependent frontend tickets.
+asyncapi.yaml is the maintained Kafka event specification, not a running broker.
+HTTP contracts will be generated from the chosen implementation after its
+technical assumptions are agreed. Do not create a competing handwritten OpenAPI.
+The canonical OpenSpec requirements define HTTP behavior and acceptance.
 
-asyncapi.yaml is the proposed Kafka schema before T0005-004. Event key is decimal string stoneId; one local partition, replication factor 1, acks=all, at-least-once delivery. Compact UTF-8 envelope limit is 256 KiB. Reused eventId must match canonical payload hash. DLQ preserves the lossless original bytes plus stage and diagnostic metadata; malformed messages cannot be coerced to a valid envelope. The concrete DLQ message is defined in asyncapi.yaml; its UUID remains stable across transfer retries. A dispatcher failure before Kafka acknowledgement has null partition/offset. Bound the encoded DLQ wrapper to 512 KiB, retain seven days and restrict inspection to operators. T0005-004 validates these contracts before publisher/consumer changes.
+No backend, publisher, broker or deployment is included in this scaffold.

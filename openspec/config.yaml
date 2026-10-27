@@ -1,6 +1,9 @@
 schema: spec-driven
 context: |
-  Stone Shelter local release. English artifacts. Generated OpenAPI; maintained AsyncAPI.
-  This is an application seed plus proposed target changes, not implemented acceptance.
-  Read AGENTS.md and execution/tasks.json. Spring AI owns inference, embeddings and RAG.
-  Use deterministic gates and isolated task worktrees. No board integration.
+  Stone Shelter product specification and lightweight static-analysis scaffold.
+  Canonical requirements and acceptance scenarios live in openspec/specs.
+  product-baseline is immutable source evidence; no implementation is bundled.
+  Declare language/framework assumption changes before each implementation experiment.
+  Every task batch starts with explicit readiness. Keep artifacts in English.
+  Generate HTTP contracts from implementation; maintain AsyncAPI before Kafka changes.
+  No runtime, deployment, Sonar, browser runner, model dispatch or Warden integration.

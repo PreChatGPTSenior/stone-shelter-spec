@@ -1,16 +1,13 @@
-# Stone Shelter — OpenSpec parallel execution project
+# Stone Shelter — specification scaffold
 
-An application seed, a consolidated product target, and a local execution package for independent development, review, testing and browser-acceptance agents.
+A lightweight starting point for comparing implementations by different languages
+and models against the same supplied product requirements.
 
-**Start at [START-HERE.md](START-HERE.md).** The repository is prepared for staged implementation; all 48 application tickets start PLANNED and product acceptance starts NOT_RUN.
+- [Start here](START-HERE.md)
+- [Canonical OpenSpec capabilities](openspec/specs/README.md)
+- [Product source materials](product-baseline/specification.json)
+- [Setup and check commands](environment-setup.md)
 
-- [Product specification](product-baseline/Stone-Shelter-Product-Specification.docx)
-- [OpenSpec target changes](openspec/changes/)
-- [Implementation task registry](execution/tasks.json)
-- [Parallel dependency map](docs/execution/parallel-map.md)
-- [Role handoffs and gates](docs/execution/handoffs.md)
-- [Environment setup](environment-setup.md)
-- [Architecture and Spring AI migration](docs/architecture.md)
-- [Verification evidence](docs/verification.md)
-
-No sibling project is modified, no application tickets are marked complete from historical evidence, and no ticket-board integration is included.
+Includes OpenSpec, ESLint, Google Checkstyle, PMD and their rules/fixtures.
+Application implementations, deployment stacks, Sonar, Playwright and agent/model
+execution infrastructure are not included. No product feature is claimed complete.
