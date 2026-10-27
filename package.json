@@ -2,7 +2,7 @@
   "name": "stone-shelter-spec",
   "version": "1.0.0",
   "private": true,
-  "description": "Stone Shelter product specification and lightweight static-analysis scaffold",
+  "description": "Stone Shelter application requirements and static analysis tools",
   "engines": {
     "node": "24.21.0",
     "npm": "11.19.0"

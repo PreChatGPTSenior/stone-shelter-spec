@@ -23,7 +23,7 @@ The system SHALL enforce the authority and change control contract and all scena
 
 #### Scenario: R002 behavioral boundaries
 - **WHEN** the authority and change control capability is exercised
-- **THEN** OpenSpec capability requirements and scenarios are the maintained target authority in this new repository. product-baseline is an immutable imported source snapshot. Update the affected OpenSpec requirements and scenarios before behavior changes. Generated OpenAPI and maintained AsyncAPI implement the contract requirements; do not maintain handwritten OpenAPI. Screenshots guide visual direction, never prove execution.
+- **THEN** OpenSpec capability requirements and scenarios define the application requirements. Update the affected OpenSpec requirements and scenarios before behavior changes. Generated OpenAPI and maintained AsyncAPI implement the contract requirements; do not maintain handwritten OpenAPI. Screenshots guide visual direction, never prove execution.
 
 #### Scenario: A01 / R002 — Scope and permissions
 - **GIVEN** A clean implementation checkout and the baseline
@@ -100,7 +100,7 @@ The system SHALL enforce the generated contracts and versioning contract and all
 
 #### Scenario: R069 behavioral boundaries
 - **WHEN** the generated contracts and versioning capability is exercised
-- **THEN** Generate /v3/api-docs and /v3/api-docs.yaml with equivalent constraints, success/error schemas, authentication, idempotency/precondition headers and SSE lifecycle; generated operations cover application routes and exclude Actuator internals. Maintain Kafka contracts in AsyncAPI before implementation; increasing event structure incompatibly requires a new schemaVersion and tested consumer behavior. Do not preserve historical unsafe compatibility merely because an early stub accepted it. Record removed input fields and added staff protection in release migration notes.
+- **THEN** Generate /v3/api-docs and /v3/api-docs.yaml with equivalent constraints, success/error schemas, authentication, idempotency/precondition headers and SSE lifecycle; generated operations cover application routes and exclude Actuator internals. Maintain Kafka contracts in AsyncAPI before implementation; increasing event structure incompatibly requires a new schemaVersion and tested consumer behavior.
 
 #### Scenario: A31 / R069 — Generated contracts and security
 - **GIVEN** Generated OpenAPI JSON and YAML and every operation in section 10
@@ -112,7 +112,7 @@ The system SHALL enforce the response representations contract and all scenarios
 
 #### Scenario: R082 behavioral boundaries
 - **WHEN** the response representations capability is exercised
-- **THEN** A public photo contains id, position, addedAt, processingStatus and nullable url; id is a UUID, position is zero-based. Public stone contains id, name, stoneType, stoneSize, biography, adoptionStatus, admissionDate and photos. Chat success and completed payload contain text, stones and sources; each stone is {id,name}, each source is {id,label,url,contentKind}, with backend-created same-origin version-backed URLs. History is {conversationId,messages}; each message has role, turnId, text, stones, sources and nullable context. USER entries have empty arrays and captured context; ASSISTANT entries have null context. Arrays are never null. This intentionally extends the historical two-field answer contract.
+- **THEN** A public photo contains id, position, addedAt, processingStatus and nullable url; id is a UUID, position is zero-based. Public stone contains id, name, stoneType, stoneSize, biography, adoptionStatus, admissionDate and photos. Chat success and completed payload contain text, stones and sources; each stone is {id,name}, each source is {id,label,url,contentKind}, with backend-created same-origin version-backed URLs. History is {conversationId,messages}; each message has role, turnId, text, stones, sources and nullable context. USER entries have empty arrays and captured context; ASSISTANT entries have null context. Arrays are never null.
 
 #### Scenario: A13 / R082 — URL expiry and contracts
 - **GIVEN** READY and PENDING photos with controllable signed-link expiry
@@ -134,7 +134,7 @@ The system SHALL enforce the search and operational request representations cont
 
 #### Scenario: R083 behavioral boundaries
 - **WHEN** the search and operational request representations capability is exercised
-- **THEN** Catalog search accepts stoneTypes[], stoneSizes[], optional adoptionStatus, admissionDateFrom/To UTC instants, page, size and one sort object {field,direction}; To is exclusive. Supported sort fields are admissionDate, name and stoneSize. Omitted sort uses Newest first; the UI sends explicit page/size. Legacy singular type/size filters are removed in the new baseline. Staff PUT uses wire names stoneType and stoneSize. Photo append and reindex start use the 72-hour replay/90-day marker policy of R029; a reindex retry returns the original job, not a second job. Jobs expose errors as {items,page,size,totalElements}, page size default 20, maximum 100.
+- **THEN** Catalog search accepts stoneTypes[], stoneSizes[], optional adoptionStatus, admissionDateFrom/To UTC instants, page, size and one sort object {field,direction}; To is exclusive. Supported sort fields are admissionDate, name and stoneSize. Omitted sort uses Newest first; the UI sends explicit page/size. Singular type/size filters are not accepted. Staff PUT uses wire names stoneType and stoneSize. Photo append and reindex start use the 72-hour replay/90-day marker policy of R029; a reindex retry returns the original job, not a second job. Jobs expose errors as {items,page,size,totalElements}, page size default 20, maximum 100.
 
 #### Scenario: A05 / R083 — Filtering and counts
 - **GIVEN** A fixed catalog contains available/reserved/adopted stones across types, sizes and UTC day boundaries
@@ -173,7 +173,7 @@ The system SHALL enforce the accessibility and responsive layout contract and al
 
 #### Scenario: R070 behavioral boundaries
 - **WHEN** the accessibility and responsive layout capability is exercised
-- **THEN** Target WCAG 2.2 AA across the stated workflows: meaningful labels/headings, keyboard access, visible and unobscured focus, error association, sufficient contrast and text scaling. Support 320 CSS px without horizontal page scroll, 200% text zoom and reduced motion. Interactive targets are at least 24 by 24 CSS px, preferably 44 for primary touch actions. Test with keyboard and a screen reader as well as automation. Modal behavior follows the WAI-ARIA dialog pattern. Replace the Russian text embedded in the placeholder with English accessible content. [E02, E05]
+- **THEN** Target WCAG 2.2 AA across the stated workflows: meaningful labels/headings, keyboard access, visible and unobscured focus, error association, sufficient contrast and text scaling. Support 320 CSS px without horizontal page scroll, 200% text zoom and reduced motion. Interactive targets are at least 24 by 24 CSS px, preferably 44 for primary touch actions. Test with keyboard and a screen reader as well as automation. Modal behavior follows the WAI-ARIA dialog pattern. Use English accessible placeholder content. [E02, E05]
 
 #### Scenario: A07 / R070 — Responsive layout and focus
 - **GIVEN** Catalog/detail with chat open and filters/adoption modal available
@@ -197,7 +197,7 @@ The system SHALL enforce the architecture and persistence contract and all scena
 
 #### Scenario: R072 behavioral boundaries
 - **WHEN** the architecture and persistence capability is exercised
-- **THEN** Use Spring MVC controllers for routes/binding/validation/statuses; services own business orchestration and transactions; repositories own queries, Criteria and ordering; mappers construct responses. Controllers never expose entities. Shared DTOs live outside controllers; services do not depend on web handlers or JPA query APIs. Follow the existing mapper naming/direction rules and record/class convention for this initial checkout; enforce only syntactically reliable parts mechanically. Liquibase owns schema; never rewrite an applied migration. Use PostgreSQL/Testcontainers rather than H2 for persistence/concurrency verification.
+- **THEN** Use Spring MVC controllers for routes/binding/validation/statuses; services own business orchestration and transactions; repositories own queries, Criteria and ordering; mappers construct responses. Controllers never expose entities. Shared DTOs live outside controllers; services do not depend on web handlers or JPA query APIs. Follow the mapper naming/direction rules and record/class convention enforced by the static analysis profile; enforce only syntactically reliable parts mechanically. Liquibase owns schema; never rewrite an applied migration. Use PostgreSQL/Testcontainers rather than H2 for persistence/concurrency verification.
 
 #### Scenario: A33 / R072 — Static and architectural handoff
 - **GIVEN** A patch with known positive and negative DTO, layer and style fixtures
@@ -209,7 +209,7 @@ The system SHALL enforce the dependency and configuration discipline contract an
 
 #### Scenario: R073 behavioral boundaries
 - **WHEN** the dependency and configuration discipline capability is exercised
-- **THEN** Start from the documented stack pins: JDK 23.0.2, Spring Boot 4.1.1, Spring AI 2.0.1, PostgreSQL 18.6, pgvector 0.8.6, Redis 8.2.10, Kafka 4.2.2, Ollama 0.40.3, Node 24.21.0/npm 11.19.0, React 19.3.0, TypeScript 6.0.3, Vite 8.3.2 and Router 8.4.0. These are source-recorded selections, not independently certified installed versions. W01 verifies availability, exact digests and compatibility; an unavailable/incompatible pin blocks implementation until an explicit version ADR amendment, with no silent substitution. Pin all direct tools/dependencies, use lockfiles, no latest, no secret values in documentation or reports.
+- **THEN** Use the required stack versions: JDK 23.0.2, Spring Boot 4.1.1, Spring AI 2.0.1, PostgreSQL 18.6, pgvector 0.8.6, Redis 8.2.10, Kafka 4.2.2, Ollama 0.40.3, Node 24.21.0/npm 11.19.0, React 19.3.0, TypeScript 6.0.3, Vite 8.3.2 and Router 8.4.0. Verify availability, exact digests and compatibility before implementation; an unavailable/incompatible version blocks implementation until an explicit specification amendment, with no silent substitution. Pin all direct tools/dependencies, use lockfiles, no latest, no secret values in documentation or reports.
 
 #### Scenario: A33 / R073 — Static and architectural handoff
 - **GIVEN** A patch with known positive and negative DTO, layer and style fixtures
@@ -221,7 +221,7 @@ The system SHALL enforce the environment readiness throughout tests contract and
 
 #### Scenario: R074 behavioral boundaries
 - **WHEN** the environment readiness throughout tests capability is exercised
-- **THEN** Every authorized implementation/test batch begins with a readiness ticket listing every covered task and its prerequisites. Check command-scoped JAVA_HOME/Maven, Node/npm, required models/digests, browser installation, effective endpoints and installed source versions. Probe from the execution context used by the tests: API HTTP/database connectivity, frontend route, MinIO, Redis operations, Kafka metadata and model inventory as applicable. Distinguish READY, BLOCKED and NOT_REQUIRED; a running container alone is insufficient. Do not use business imports or application tests as preflight. Provision only approved isolated resources; never mutate the original checkout.
+- **THEN** Every authorized implementation/test batch begins with a readiness ticket listing every covered task and its prerequisites. Check command-scoped JAVA_HOME/Maven, Node/npm, required models/digests, browser installation, effective endpoints and installed source versions. Probe from the execution context used by the tests: API HTTP/database connectivity, frontend route, MinIO, Redis operations, Kafka metadata and model inventory as applicable. Distinguish READY, BLOCKED and NOT_REQUIRED; a running container alone is insufficient. Do not use business imports or application tests as preflight. Provision only approved isolated resources; preserve unrelated projects and private data.
 
 #### Scenario: A34 / R074 — Environment loss during integration
 - **GIVEN** A requested batch with declared components and isolated endpoints

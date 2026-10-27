@@ -1,13 +1,15 @@
-# Stone Shelter — specification scaffold
+# Stone Shelter — application requirements
 
-A lightweight starting point for comparing implementations by different languages
-and models against the same supplied product requirements.
+Requirements for an English-language educational application for discovering,
+maintaining and adopting stones, with a grounded conversational assistant.
 
+- [Product requirements and acceptance scenarios](openspec/specs/README.md)
 - [Start here](START-HERE.md)
-- [Canonical OpenSpec capabilities](openspec/specs/README.md)
-- [Product source materials](product-baseline/specification.json)
-- [Setup and check commands](environment-setup.md)
+- [Tool setup and checks](environment-setup.md)
+- [Visual references](product-baseline/assets/)
+- [Acceptance matrix](product-baseline/acceptance-matrix.csv)
+- [Qualification data](data/qualification-fixture.json)
+- [Standards references](product-baseline/standards.json)
+- [Additional reference document](reference/Stone_Shelter_Phase_2_Engineering_Guide.docx)
 
-Includes OpenSpec, ESLint, Google Checkstyle, PMD and their rules/fixtures.
-Application implementations, deployment stacks, Sonar, Playwright and agent/model
-execution infrastructure are not included. No product feature is claimed complete.
+The repository includes OpenSpec, ESLint, Google Checkstyle and PMD rules.

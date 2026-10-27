@@ -3,8 +3,7 @@
   "object_key": "stone-encyclopedia_en.md",
   "bucket": "stone-encyclopedia",
   "document_key": "stone-encyclopedia-en",
-  "source": "product-baseline/qualification-fixture.json",
+  "source": "data/qualification-fixture.json",
   "sha256": "4a0b7ba08217f96a0378e4aa4e0a90d4ca0134238d70c07b40f2a7f4b6be6cb8",
-  "scope": "Approved qualification edition; no other local directory is a source",
-  "provisioning_task": "T0005-003"
+  "scope": "Approved qualification edition; no other local directory is a source"
 }

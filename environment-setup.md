@@ -30,7 +30,5 @@ source paths and propagates real tool/rule failures. These checks do not execute
 an application or evaluate model output.
 
 Setup downloads only the declared checksum-verified analyzer artifacts and locked
-Node packages into ignored local caches/dependencies. No Docker, database, model,
-Sonar, deployment credentials, Maven application build or provider key is needed.
-Choose any additional language/runtime and its qualification explicitly for a
-future experiment rather than silently changing the supplied product target.
+Node packages into ignored local caches/dependencies. Only the specification and analyzer toolchain is needed for these checks.
+Qualify application runtimes separately before implementing the relevant requirements.

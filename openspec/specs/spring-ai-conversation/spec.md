@@ -173,9 +173,9 @@ The system SHALL enforce the knowledge and fictional content contract and all sc
 - **THEN** Fiction explicitly labelled; individual claims supported; same-version citations resolve; no secret keys/scores; missing evidence acknowledged; deleted projection does not break retained citations
 
 #### Scenario: A36 / R052 — Independent AI qualification
-- **GIVEN** A versioned 20-scenario, 28-turn fixture with revised source, fiction and broad-search oracles
+- **GIVEN** A versioned 20-scenario, 28-turn fixture with source-attribution, fiction and broad-search oracles
 - **WHEN** Collect original real-model results and controlled races under the declared quota
-- **THEN** All hard checks, at least 8/9 semantic and 10/12 ordinary-answer scenarios must pass; incomplete cases cannot pass; templates do not inflate quality; the source 2/9 and 0/12 results remain historical failures
+- **THEN** All hard checks, at least 8/9 semantic and 10/12 ordinary-answer scenarios must pass; incomplete cases cannot pass; templates do not inflate quality
 
 ### Requirement: R053 Grounded answer presentation
 The system SHALL enforce the grounded answer presentation contract and all scenarios below.
@@ -190,9 +190,9 @@ The system SHALL enforce the grounded answer presentation contract and all scena
 - **THEN** Fiction explicitly labelled; individual claims supported; same-version citations resolve; no secret keys/scores; missing evidence acknowledged; deleted projection does not break retained citations
 
 #### Scenario: A36 / R053 — Independent AI qualification
-- **GIVEN** A versioned 20-scenario, 28-turn fixture with revised source, fiction and broad-search oracles
+- **GIVEN** A versioned 20-scenario, 28-turn fixture with source-attribution, fiction and broad-search oracles
 - **WHEN** Collect original real-model results and controlled races under the declared quota
-- **THEN** All hard checks, at least 8/9 semantic and 10/12 ordinary-answer scenarios must pass; incomplete cases cannot pass; templates do not inflate quality; the source 2/9 and 0/12 results remain historical failures
+- **THEN** All hard checks, at least 8/9 semantic and 10/12 ordinary-answer scenarios must pass; incomplete cases cannot pass; templates do not inflate quality
 
 ### Requirement: R054 Model limits and completion fallback
 The system SHALL enforce the model limits and completion fallback contract and all scenarios below.

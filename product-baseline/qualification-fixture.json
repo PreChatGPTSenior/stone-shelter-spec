@@ -1,6 +1,6 @@
 {
   "version": "SS-QUAL-1.0",
-  "source_fixture": "Feature 0027 approved fixture; explicit target-oracle amendments listed here",
+  "source_fixture": "SS-QUAL-1.0 qualification scenarios and expected outcomes",
   "fixture_calendar": "2026-10-13T12:00:00Z",
   "clock_rule": "Only date interpretation is fixed. Deadlines advance and usage is charged to the actual UTC day. Seed order establishes ID ties. Each scenario has isolated initial state. No live import is authorized.",
   "cards": [
@@ -230,7 +230,7 @@
     [
       "Q027-007",
       "Find a stone for a display shelf.",
-      "Semantic-only selection. Permitted IDs are B01\u2013B07, G01 and G02; at least one G01/G02, with card-supported members before type-only ones. B10/G03/O01 excluded.",
+      "Semantic-only selection. Permitted IDs are B01–B07, G01 and G02; at least one G01/G02, with card-supported members before type-only ones. B10/G03/O01 excluded.",
       "R, A"
     ],
     [
@@ -242,19 +242,19 @@
     [
       "Q027-009",
       "Find a small basalt for a display shelf.",
-      "Type-supported B01\u2013B06; present B01\u2013B05 in ID order and indicate more. Card silence permits E01; B10 vetoed. Exact constraints apply before retrieval cap.",
+      "Type-supported B01–B06; present B01–B05 in ID order and indicate more. Card silence permits E01; B10 vetoed. Exact constraints apply before retrieval cap.",
       "R, A"
     ],
     [
       "Q027-010",
       "Find a small basalt for a display shelf, preferably blue.",
-      "Partial semantic B01\u2013B06; show B01\u2013B05 and more notice, identifying blue as unfulfilled. Shelf support is not dropped because color is unknown.",
+      "Partial semantic B01–B06; show B01–B05 and more notice, identifying blue as unfulfilled. Shelf support is not dropped because color is unknown.",
       "R, A"
     ],
     [
       "Q027-011",
       "Find a red stone for a display shelf.",
-      "Include G01/G02 before any type-only partial matches. B01\u2013B07 may be partials with red unfulfilled; G03/B10/O01 are excluded despite other support. Every displayed ID must belong to this allowed set.",
+      "Include G01/G02 before any type-only partial matches. B01–B07 may be partials with red unfulfilled; G03/B10/O01 are excluded despite other support. Every displayed ID must belong to this allowed set.",
       "R, A"
     ],
     [
@@ -312,12 +312,12 @@
       "H"
     ]
   ],
-  "amendments": [
-    "Q027-001\u2013003 and Q027-017\u2013018 explicitly request explanation so ordinary generated-answer scoring does not conflict with deterministic pure exact results.",
+  "status": "SPECIFIED_NOT_EXECUTED",
+  "oracle_notes": [
+    "Q027-001–003 and Q027-017–018 explicitly request explanation so ordinary generated-answer scoring does not conflict with deterministic pure exact results.",
     "Q027-005 honors an explicit broad catalog request.",
     "Q027-019 adds fictional passage E08 and truthful source attribution.",
     "Q027-020 allows healthy history/replay during provider-only outage.",
     "Q027-013 permits an optional refinement suggestion without automatic constraint relaxation."
-  ],
-  "status": "SPECIFIED_NOT_EXECUTED"
+  ]
 }

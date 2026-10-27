@@ -1,12 +1,11 @@
-# Stone Shelter specification scaffold
+# Stone Shelter requirements
 
-This is a minimal starting repository for evaluating implementations against the
-supplied product specification. No application, agent runner or deployment is
-bundled. Start at START-HERE.md and the relevant openspec/specs capability.
+Start at START-HERE.md and the relevant openspec/specs capability.
+This repository contains application requirements and static analysis tools.
 
 - Read the relevant requirements/scenarios before implementation. Change the
   specification first when behavior or a technical assumption changes.
-- Keep product-baseline immutable source evidence; OpenSpec is maintained authority.
+- OpenSpec requirements and scenarios are the maintained authority.
   Product requirements include original technical choices. Explicitly agree and
   record changes needed for another language/framework before implementing it.
 - Every implementation plan starts with an explicit readiness task covering the
@@ -18,8 +17,7 @@ bundled. Start at START-HERE.md and the relevant openspec/specs capability.
   missing tools and failed checks must fail rather than report a fabricated PASS.
 - Generate HTTP contracts from the chosen implementation; do not maintain a
   competing handwritten OpenAPI. Update AsyncAPI before Kafka implementation.
-- Do not add runtime services, deployment, Sonar, Playwright, provider/model calls
-  or Agent Warden integration unless explicitly requested. No replacement harness.
+- Add implementation code, services and integrations only when explicitly requested.
 - Preserve Git history, external backups, private data and sibling projects. Never
   print secret values. Exclude engineering-log paths before traversal.
 - All artifacts are English. No commit, push or merge without explicit request.

@@ -1,0 +1,64 @@
+{
+  "references": [
+    [
+      "E01",
+      "RFC 9457 Problem Details for HTTP APIs",
+      "https://www.rfc-editor.org/rfc/rfc9457.html",
+      "Machine-readable error format; does not prescribe the project's business status decisions."
+    ],
+    [
+      "E02",
+      "WAI ARIA Modal Dialog Pattern",
+      "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/",
+      "Modal focus, inert background, keyboard behavior and focus restoration."
+    ],
+    [
+      "E03",
+      "OWASP Authorization Cheat Sheet",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+      "Deny by default and validate permissions on every request."
+    ],
+    [
+      "E04",
+      "OWASP File Upload Cheat Sheet",
+      "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+      "Layered upload validation, authorized uploaders, generated filenames and isolated storage."
+    ],
+    [
+      "E05",
+      "W3C Web Content Accessibility Guidelines 2 2",
+      "https://www.w3.org/TR/WCAG22/",
+      "Accessibility conformance target; this document does not claim an audit has passed."
+    ],
+    [
+      "E06",
+      "WHATWG Server sent events",
+      "https://html.spec.whatwg.org/multipage/server-sent-events.html",
+      "UTF-8 event framing; the named business events and POST fetch transport are project decisions."
+    ],
+    [
+      "E07",
+      "Checkstyle Google Java Style coverage",
+      "https://checkstyle.org/google-style.html",
+      "Standard Java style baseline; tool-version-specific coverage must be checked."
+    ],
+    [
+      "E08",
+      "PMD Java rules",
+      "https://pmd.github.io/pmd/pmd_rules_java.html",
+      "Built-in rules are a starting point; custom architectural guarantees need independent checks."
+    ],
+    [
+      "E09",
+      "typescript eslint Shared Configs",
+      "https://typescript-eslint.io/users/configs/",
+      "Recommended typed linting configurations for TypeScript."
+    ],
+    [
+      "E10",
+      "Sonar code verification baseline",
+      "https://www.sonarsource.com/resources/library/how-sonarqube-establishes-a-practical-baseline-for-code-verification/",
+      "New-code coverage 80% and duplication 3% are adopted as explicit project thresholds."
+    ]
+  ]
+}
